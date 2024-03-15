@@ -22,24 +22,24 @@ const (
 )
 
 type LoadTest struct {
-	ID           uuid.UUID // A unique identifier for the load test
-	Name         string
-	State        LoadTestState
-	CreatedAt    time.Time
-	LastUpdateAt time.Time
-	Metrics      LoadTestMetrics
-	LoadTestPlan LoadTestPlan
+	ID           uuid.UUID       `json:"id"` // A unique identifier for the load test
+	Name         string          `json:"name"`
+	State        LoadTestState   `json:"state"`
+	CreatedAt    time.Time       `json:"createdAt"`
+	LastUpdateAt time.Time       `json:"lastUpdateAt"`
+	Metrics      LoadTestMetrics `json:"metrics"`
+	LoadTestPlan LoadTestPlan    `json:"loadTestPlan"`
 }
 
 type LoadTestPlan struct {
-	URL          string
-	Duration     int
-	VirtualUsers int
+	URL          string `json:"url"`
+	Duration     int    `json:"duration"`
+	VirtualUsers int    `json:"virtualUsers"`
 }
 
 type LoadTestMetrics struct {
-	GlobalMetrics LoadTestMetricFragment
-	Metrics       []LoadTestMetricFragment
+	GlobalMetrics LoadTestMetricFragment   `json:"globalMetrics"`
+	Metrics       []LoadTestMetricFragment `json:"metrics"`
 }
 
 type LoadTestWorkerMetrics struct {

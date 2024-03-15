@@ -13,7 +13,7 @@ type LoadTask struct {
 
 type TaskAssignment struct {
 	Task
-	AssignedWorkerID string    `json:"assignedWorkerId"`
+	AssignedWorkerID string `json:"assignedWorkerId"`
 	LoadTestID       string `json:"loadTestId"`
 }
 
