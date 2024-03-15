@@ -91,7 +91,7 @@ func sendStopTaskToWorker(loadTestID string, workerID string) {
 
 	err = initializers.RabbitCh.Publish(
 		"",            // exchange
-		"task.delete", // routing key
+		"task.cancel", // routing key
 		false,         // mandatory
 		false,         // immediate
 		amqp.Publishing{

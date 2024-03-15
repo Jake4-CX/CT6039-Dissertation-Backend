@@ -1,9 +1,11 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 
 	"github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/cmd/worker/services"
+	"github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/cmd/worker/state"
 	"github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/pkg/structs"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
@@ -36,15 +38,20 @@ func HandleTaskCreated(d amqp.Delivery) {
 func HandleTaskCancelled(d amqp.Delivery) {
 	log.Infof("Received message: %s", string(d.Body))
 
-	var loadTestID struct {
+	var loadTest struct {
 		LoadTestID       string `json:"loadTestId"`
 		AssignedWorkerID string `json:"assignedWorkerId"`
 	}
-	err := json.Unmarshal(d.Body, &loadTestID)
+	err := json.Unmarshal(d.Body, &loadTest)
 	if err != nil {
 		log.Errorf("Error unmarshalling load test ID: %s", err)
 		return
 	}
 
-	log.Infof("Cancelling load test with ID: %s", loadTestID)
+	log.Infof("Cancelling load test with ID: %s", loadTest.LoadTestID)
+
+	if cancelFunc, ok := state.LoadTestCancellers.Load(loadTest.LoadTestID); ok {
+		cancelFunc.(context.CancelFunc)()
+		state.LoadTestCancellers.Delete(loadTest.LoadTestID)
+	}
 }

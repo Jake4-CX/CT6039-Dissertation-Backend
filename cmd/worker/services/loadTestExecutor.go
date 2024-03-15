@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"sync"
 	"time"
+
+	"github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/cmd/worker/state"
 	"github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/pkg/structs"
 	log "github.com/sirupsen/logrus"
 )
@@ -32,6 +34,8 @@ func ExecuteLoadTest(config structs.Task, workerID string, loadTestID string) st
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(config.Duration)*time.Millisecond)
 	defer cancel()
+
+	state.LoadTestCancellers.Store(loadTestID, cancel)
 
 	log.Infof("Virtual Users for this load test: %d", config.VirtualUsers)
 

@@ -23,7 +23,7 @@ func InitializeRabbitMQ() {
 	}
 
 	queues := []string{
-		"task.create", "task.status.update", "task.delete", "task.get",
+		"task.create", "task.status.update", "task.cancel", "task.delete", "task.get",
 		"worker.join", "worker.leave",
 		"worker.status.update", "worker.performance.metrics",
 		"worker.heartbeat"}

@@ -24,6 +24,7 @@ func main() {
 	go handlers.StartHeartbeat(handlers.WorkerID, 20*time.Second)
 
 	startConsumer("task.create", handlers.HandleTaskCreated)
+	startConsumer("task.cancel", handlers.HandleTaskCancelled)
 
 	// Wait for interrupt signal to gracefully shutdown
 	c := make(chan os.Signal, 1)
