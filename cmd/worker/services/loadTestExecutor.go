@@ -30,7 +30,7 @@ func ExecuteLoadTest(config structs.Task, workerID string, loadTestID string) st
 	}
 
 	var wg sync.WaitGroup
-	responseChannel := make(chan structs.ResponseItem)
+	responseChannel := make(chan structs.ResponseItem, 100)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(config.Duration)*time.Millisecond)
 	defer cancel()
@@ -62,11 +62,8 @@ func ExecuteLoadTest(config structs.Task, workerID string, loadTestID string) st
 		}()
 	}
 
-	// Wait for all goroutines to finish
-	go func() {
-		wg.Wait()
-		close(responseChannel)
-	}()
+	wg.Wait()
+	close(responseChannel)
 
 	metrics := collectMetrics(responseChannel)
 	testDuration := time.Since(testStartTime)
@@ -98,6 +95,7 @@ func makeAsyncRequest(ctx context.Context, client *http.Client, url string, resp
 	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
 	if err != nil {
 		log.Errorf("Failed to create request: %s", err)
+		responseChannel <- structs.ResponseItem{StatusCode: 0, ResponseTime: 0}
 		return
 	}
 
