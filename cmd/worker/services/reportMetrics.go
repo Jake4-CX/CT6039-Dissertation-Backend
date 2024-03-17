@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"encoding/json"
-	"sync/atomic"
 	"time"
 
 	"github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/pkg/initializers"
@@ -16,9 +15,7 @@ func ReportMetricsPeriodically(ctx context.Context, workerID string, responseCha
 	ticker := time.NewTicker(1000 * time.Millisecond)
 	defer ticker.Stop()
 
-	var totalSuccessRequests int64
-	var totalFailedRequests int64
-	var totalResponseTime int64
+	var responseFragments []structs.ResponseFragment = make([]structs.ResponseFragment, 0)
 
 	go func() {
 		for {
@@ -26,17 +23,10 @@ func ReportMetricsPeriodically(ctx context.Context, workerID string, responseCha
 			case <-ctx.Done():
 				return
 			case resp := <-responseChannel:
-
-				if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-					atomic.AddInt64(&totalSuccessRequests, 1)
-				} else {
-					atomic.AddInt64(&totalFailedRequests, 1)
-				}
-
-				atomic.AddInt64(&totalResponseTime, resp.ResponseTime)
+				responseFragments = append(responseFragments, structs.ResponseFragment{StatusCode: resp.StatusCode, ResponseTime: resp.ResponseTime})
 			}
 		}
-	
+
 	}()
 
 	for {
@@ -45,31 +35,23 @@ func ReportMetricsPeriodically(ctx context.Context, workerID string, responseCha
 			return
 		case <-ticker.C:
 			// Time to report metrics
-			successSnapshot := atomic.SwapInt64(&totalSuccessRequests, 0)
-			failedSnapshot := atomic.SwapInt64(&totalFailedRequests, 0)
-			responseTimeSnapshot := atomic.SwapInt64(&totalResponseTime, 0)
+
+			fragments := &responseFragments
 
 			metrics := structs.LoadTestWorkerMetrics{
-				WorkerID:   workerID,
-				LoadTestID: loadTestID,
-				LoadTestMetricFragment: structs.LoadTestMetricFragment{
-					TotalRequests:       int(successSnapshot + failedSnapshot),
-					SuccessfulRequests:  int(successSnapshot), 
-					FailedRequests:      0,
-					TotalResponseTime:   responseTimeSnapshot,
-					AverageResponseTime: 0,
-				},
+				WorkerID:          workerID,
+				LoadTestID:        loadTestID,
+				Timestamp:         time.Now().UnixNano() / int64(time.Millisecond),
+				ResponseFragments: *fragments,
 			}
-			if metrics.TotalRequests > 0 {
-				metrics.AverageResponseTime = responseTimeSnapshot / int64(metrics.TotalRequests)
-			}
+
+			responseFragments = make([]structs.ResponseFragment, 0)
 
 			metricsJSON, _ := json.Marshal(metrics)
 			_ = initializers.RabbitCh.Publish(
 				"", "worker.performance.metrics", false, false,
 				amqp.Publishing{ContentType: "application/json", Body: metricsJSON},
 			)
-
 
 			log.Infof("Reported metrics: %+v", metrics)
 
@@ -81,4 +63,3 @@ func ReportMetricsPeriodically(ctx context.Context, workerID string, responseCha
 	}
 
 }
-

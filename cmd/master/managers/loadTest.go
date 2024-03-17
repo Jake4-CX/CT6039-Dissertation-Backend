@@ -62,11 +62,12 @@ func UpdateLoadTestState(id uuid.UUID, state structs.LoadTestState) {
 		case structs.Running:
 			test.State = state
 			test.LastUpdateAt = time.Now()
+			test.LoadTestPlan.StartedAt = time.Now()
 
 			initializers.InitalizeTest(test, GetAvailableWorkers())
 
 			log.Infof("Load test with ID %s is now running", id)
-			
+
 		case structs.Cancelled:
 			test.State = state
 			test.LastUpdateAt = time.Now()
@@ -89,20 +90,54 @@ func UpdateLoadTestState(id uuid.UUID, state structs.LoadTestState) {
 	}
 }
 
-func AggregateMetrics(id uuid.UUID, newMetrics structs.LoadTestMetricFragment) {
+func AggregateMetrics(id uuid.UUID, responseFragments []structs.ResponseFragment, reportedAt int64) {
+
+	var totalSuccessRequests int
+	var totalFailedRequests int
+
+	var totalResponseTime int64
+
+	// Preprocessing:
+	for _, fragment := range responseFragments {
+		if fragment.StatusCode >= 200 && fragment.StatusCode < 300 {
+			totalSuccessRequests++
+		} else {
+			totalFailedRequests++
+		}
+		totalResponseTime += fragment.ResponseTime
+	}
+
 	LoadManager.lock.Lock()
 	defer LoadManager.lock.Unlock()
 
-	// Log the current state before updating
 	if test, exists := LoadManager.LoadTests[id]; exists {
-		test.Metrics.GlobalMetrics.TotalRequests += newMetrics.TotalRequests
-		test.Metrics.GlobalMetrics.SuccessfulRequests += newMetrics.SuccessfulRequests
-		test.Metrics.GlobalMetrics.FailedRequests += newMetrics.FailedRequests
-		test.Metrics.GlobalMetrics.TotalResponseTime += newMetrics.TotalResponseTime
-		test.Metrics.GlobalMetrics.AverageResponseTime = test.Metrics.GlobalMetrics.TotalResponseTime / int64(test.Metrics.GlobalMetrics.TotalRequests)
-		test.LastUpdateAt = time.Now()
 
-		test.Metrics.Metrics = append(test.Metrics.Metrics, newMetrics)
+		// Calculate elapsed time
+		startTime := test.LoadTestPlan.StartedAt.UnixNano() / int64(time.Millisecond)
+		elapsedSeconds := (reportedAt - startTime) / 1000
+
+		log.Infof("Aggregating metrics for load test with ID %s at %d seconds for timestamp %d", id, elapsedSeconds, reportedAt)
+
+		if test.Metrics.Metrics == nil {
+			test.Metrics.Metrics = make(map[int64][]structs.ResponseFragment)
+		}
+
+		// append metrics (as there can be multiple workers reporting at the same time)
+		test.Metrics.Metrics[elapsedSeconds] = append(test.Metrics.Metrics[elapsedSeconds], responseFragments...)
+
+		totalRequests := test.Metrics.GlobalMetrics.TotalRequests + int(len(responseFragments))
+		totalResponseTime := test.Metrics.GlobalMetrics.TotalResponseTime + totalResponseTime
+
+		newMetrics := structs.LoadTestMetricSummary{
+			TotalRequests:       totalRequests,
+			SuccessfulRequests:  test.Metrics.GlobalMetrics.SuccessfulRequests + totalSuccessRequests,
+			FailedRequests:      test.Metrics.GlobalMetrics.FailedRequests + totalFailedRequests,
+			TotalResponseTime:   totalResponseTime,
+			AverageResponseTime: totalResponseTime / int64(totalRequests),
+		}
+
+		test.Metrics.GlobalMetrics = newMetrics
+		test.LastUpdateAt = time.Now()
 
 	} else {
 		log.Errorf("Load test with ID %s not found for metrics aggregation", id)

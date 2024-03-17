@@ -23,5 +23,5 @@ func HandleWorkerMetrics(d amqp.Delivery) {
 		return
 	}
 
-	managers.AggregateMetrics(loadTestID, metrics.LoadTestMetricFragment)
+	managers.AggregateMetrics(loadTestID, metrics.ResponseFragments, metrics.Timestamp)
 }

@@ -13,7 +13,7 @@ import (
 
 // LoadTestExecutorService is a service that executes a load test
 
-func ExecuteLoadTest(config structs.Task, workerID string, loadTestID string) structs.LoadTestWorkerMetrics {
+func ExecuteLoadTest(config structs.Task, workerID string, loadTestID string) structs.LoadTestMetricSummary {
 	log.Infof("Executing load test with config: %+v", config)
 
 	if config.Duration < 1000 {
@@ -22,7 +22,7 @@ func ExecuteLoadTest(config structs.Task, workerID string, loadTestID string) st
 	}
 	if config.VirtualUsers <= 0 {
 		log.Errorf("VirtualUsers must be greater than 0")
-		return structs.LoadTestWorkerMetrics{}
+		return structs.LoadTestMetricSummary{}
 	}
 
 	client := &http.Client{
@@ -72,8 +72,8 @@ func ExecuteLoadTest(config structs.Task, workerID string, loadTestID string) st
 	return metrics
 }
 
-func collectMetrics(responseChannel <-chan structs.ResponseItem) structs.LoadTestWorkerMetrics {
-	var metrics structs.LoadTestWorkerMetrics
+func collectMetrics(responseChannel <-chan structs.ResponseItem) structs.LoadTestMetricSummary {
+	var metrics structs.LoadTestMetricSummary
 	for item := range responseChannel {
 		metrics.TotalRequests++
 		metrics.TotalResponseTime += item.ResponseTime

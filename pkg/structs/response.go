@@ -32,23 +32,30 @@ type LoadTest struct {
 }
 
 type LoadTestPlan struct {
-	URL          string `json:"url"`
-	Duration     int    `json:"duration"`
-	VirtualUsers int    `json:"virtualUsers"`
+	URL          string    `json:"url"`
+	StartedAt    time.Time `json:"startedAt"`
+	Duration     int       `json:"duration"`
+	VirtualUsers int       `json:"virtualUsers"`
 }
 
 type LoadTestMetrics struct {
-	GlobalMetrics LoadTestMetricFragment   `json:"globalMetrics"`
-	Metrics       []LoadTestMetricFragment `json:"metrics"`
+	GlobalMetrics LoadTestMetricSummary        `json:"globalMetrics"`
+	Metrics       map[int64][]ResponseFragment `json:"metrics"`
 }
 
 type LoadTestWorkerMetrics struct {
-	WorkerID   string `json:"workerId"`
-	LoadTestID string `json:"loadTestId"`
-	LoadTestMetricFragment
+	WorkerID          string             `json:"workerId"`
+	LoadTestID        string             `json:"loadTestId"`
+	Timestamp         int64              `json:"timestamp"`
+	ResponseFragments []ResponseFragment `json:"loadTestMetricFragments"`
 }
 
-type LoadTestMetricFragment struct {
+type ResponseFragment struct {
+	StatusCode   int   `json:"statusCode"`
+	ResponseTime int64 `json:"responseTime"`
+}
+
+type LoadTestMetricSummary struct {
 	TotalRequests       int   `json:"totalRequests"`
 	SuccessfulRequests  int   `json:"successfulRequests"`
 	FailedRequests      int   `json:"failedRequests"`
