@@ -1,12 +1,15 @@
 package controllers
 
 import (
+	"net/http"
 	"time"
 
 	"github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/cmd/master/managers"
 	"github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/pkg/structs"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+
+	log "github.com/sirupsen/logrus"
 )
 
 func GetLoadTests(c *gin.Context) {
@@ -121,4 +124,26 @@ func StopLoadTest(c *gin.Context) {
 		c.JSON(404, gin.H{"error": "Load test not found"})
 		return
 	}
+}
+
+func UpdateLoadTestPlan(c *gin.Context) {
+	id := c.Param("id")
+
+	loadTestID, err := uuid.Parse(id)
+	if err != nil {
+		c.JSON(400, gin.H{"error": "Invalid UUID"})
+		return
+	}
+
+	var requestBody structs.UpdateTestPlanRequest
+	if err := c.BindJSON(&requestBody); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		return
+	}
+
+	log.Info("Test plan: ", requestBody.TestPlan)
+	log.Info("Load test ID: ", loadTestID)
+	log.Info("ReactFlow Edges: ", requestBody.ReactFlow.Edges)
+
+	c.JSON(200, gin.H{"message": "Test plan updated"})
 }

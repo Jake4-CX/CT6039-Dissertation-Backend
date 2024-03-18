@@ -60,6 +60,7 @@ func main() {
 
 	// Create load test
 	router.POST("/load-tests", controllers.CreateLoadTest)
+	router.PUT("/load-tests/:id/plan", controllers.UpdateLoadTestPlan)
 
 	log.Fatal(router.Run("0.0.0.0:" + os.Getenv("REST_PORT")))
 
