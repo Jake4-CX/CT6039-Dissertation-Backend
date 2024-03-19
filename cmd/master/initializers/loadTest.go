@@ -2,8 +2,8 @@ package initializers
 
 import (
 	"encoding/json"
+	"time"
 
-	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 
@@ -11,11 +11,15 @@ import (
 	"github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/pkg/structs"
 )
 
-func InitalizeTest(loadTest *structs.LoadTest, availableWorkers []*structs.Worker) {
+type CompletionCallback func(testModel structs.LoadTestTestsModel) error
+
+func InitalizeTest(loadTest *structs.LoadTestTestsModel, availableWorkers []*structs.Worker, onComplete CompletionCallback) {
+
+	log.Infof("Initializing load test with ID %d", loadTest.ID)
 
 	// split strategy
-	virtualUsersPerWorker := loadTest.LoadTestPlan.VirtualUsers / len(availableWorkers)
-	remainingUsers := loadTest.LoadTestPlan.VirtualUsers % len(availableWorkers)
+	virtualUsersPerWorker := loadTest.VirtualUsers / len(availableWorkers)
+	remainingUsers := loadTest.VirtualUsers % len(availableWorkers)
 
 	for _, worker := range availableWorkers {
 		log.Infof("Assigning task to worker %s", worker.ID)
@@ -25,29 +29,33 @@ func InitalizeTest(loadTest *structs.LoadTest, availableWorkers []*structs.Worke
 			remainingUsers--
 		}
 
-		task := structs.Task{
-			URL:          loadTest.LoadTestPlan.URL,
-			Duration:     loadTest.LoadTestPlan.Duration,
-			VirtualUsers: virtualUsersForThisWorker,
-		}
-
-		sendStartTaskToWorker(task, worker.ID, loadTest.ID)
+		sendStartTaskToWorker(*loadTest, worker.ID)
 	}
+
+	// After duration (loadTest.Duration) has passed, mark the load test as complete
+	go func() {
+		duration := time.Duration(loadTest.Duration) * time.Millisecond
+		time.Sleep(duration)
+		
+		onComplete(*loadTest)
+
+		log.Infof("Test duration reached. Stopping load test ID %d", loadTest.ID)
+	}()
 }
 
-func CancelTest(loadTestID uuid.UUID, availableWorkers []*structs.Worker) {
+func CancelTest(loadTestsTest structs.LoadTestTestsModel, availableWorkers []*structs.Worker) {
 	// ToDo: Method to check if the loadTest Task has been assigned to the workers in question
 
 	for _, worker := range availableWorkers {
-		sendStopTaskToWorker(loadTestID.String(), worker.ID)
+		sendStopTaskToWorker(loadTestsTest, worker.ID)
 	}
 }
 
-func sendStartTaskToWorker(task structs.Task, workerID string, loadTestID uuid.UUID) {
+func sendStartTaskToWorker(loadTest structs.LoadTestTestsModel, workerID string) {
+
 	assignment := structs.TaskAssignment{
-		Task:             task,
-		AssignedWorkerID: workerID,
-		LoadTestID:       loadTestID.String(),
+		LoadTestTestsModel: loadTest,
+		AssignedWorkerID:   workerID,
 	}
 
 	taskBytes, err := json.Marshal(assignment)
@@ -73,17 +81,14 @@ func sendStartTaskToWorker(task structs.Task, workerID string, loadTestID uuid.U
 	log.Infof("Task created!")
 }
 
-func sendStopTaskToWorker(loadTestID string, workerID string) {
+func sendStopTaskToWorker(loadTest structs.LoadTestTestsModel, workerID string) {
 
-	cancellationMsg := struct {
-		LoadTestID       string `json:"loadTestId"`
-		AssignedWorkerID string `json:"assignedWorkerId"`
-	}{
-		LoadTestID:       loadTestID,
-		AssignedWorkerID: workerID,
+	cancelAssignment := structs.TaskAssignment{
+		LoadTestTestsModel: loadTest,
+		AssignedWorkerID:   workerID,
 	}
 
-	msgBytes, err := json.Marshal(cancellationMsg)
+	msgBytes, err := json.Marshal(cancelAssignment)
 	if err != nil {
 		log.Errorf("Failed to marshal cancellation message: %s", err)
 		return

@@ -4,8 +4,9 @@ import (
 	"os"
 	"time"
 	"github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/cmd/master/http/controllers"
+	"github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/cmd/master/initializers"
 	"github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/cmd/master/handlers"
-	"github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/pkg/initializers"
+	pkgInitalizer "github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/pkg/initializers"
 	"github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/pkg/structs"
 	"github.com/gin-gonic/gin"
 	"github.com/gin-contrib/cors"
@@ -17,9 +18,10 @@ var workers map[string]*structs.Worker
 
 func main() {
 
-	initializers.LoadEnvVariables()
-	initializers.InitializeRabbitMQ()
-	defer initializers.CleanupRabbitMQ()
+	pkgInitalizer.LoadEnvVariables()
+	initializers.InitializeDB()
+	pkgInitalizer.InitializeRabbitMQ()
+	defer pkgInitalizer.CleanupRabbitMQ()
 
 	workers = make(map[string]*structs.Worker)
 
@@ -55,12 +57,15 @@ func main() {
 	router.GET("/load-tests/:id", controllers.GetLoadTest)
 
 	// Start load test
-	router.GET("/load-tests/:id/start", controllers.StartLoadTest)
+	router.POST("/load-tests/:id/start", controllers.StartLoadTest)
 	router.GET("/load-tests/:id/stop", controllers.StopLoadTest)
 
 	// Create load test
 	router.POST("/load-tests", controllers.CreateLoadTest)
 	router.PUT("/load-tests/:id/plan", controllers.UpdateLoadTestPlan)
+
+	// Delete load test
+	router.DELETE("/load-tests/:id", controllers.DeleteLoadTest)
 
 	log.Fatal(router.Run("0.0.0.0:" + os.Getenv("REST_PORT")))
 
@@ -81,7 +86,7 @@ func monitorWorkers() {
 }
 
 func startConsumer(queueName string, handlerFunc func(amqp.Delivery)) {
-	msgs, err := initializers.RabbitCh.Consume(
+	msgs, err := pkgInitalizer.RabbitCh.Consume(
 		queueName,
 		"",
 		true,

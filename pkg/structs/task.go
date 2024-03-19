@@ -12,9 +12,8 @@ type LoadTask struct {
 }
 
 type TaskAssignment struct {
-	Task
-	AssignedWorkerID string `json:"assignedWorkerId"`
-	LoadTestID       string `json:"loadTestId"`
+	LoadTestTestsModel LoadTestTestsModel `json:"loadTest"`
+	AssignedWorkerID   string             `json:"assignedWorkerId"`
 }
 
 type Task struct {

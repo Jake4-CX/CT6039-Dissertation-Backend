@@ -1,6 +1,7 @@
 package managers
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -10,87 +11,131 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type LoadTestLoadManager struct {
-	LoadTests map[uuid.UUID]*structs.LoadTest
-	lock      sync.RWMutex
+type LoadTestMetricsManager struct {
+	Metrics map[uint]*map[int64][]structs.ResponseFragment // LoadTestID -> Metrics
+	lock    sync.RWMutex
 }
 
-var LoadManager *LoadTestLoadManager
+var MetricsManager *LoadTestMetricsManager
 
 func init() {
-	LoadManager = &LoadTestLoadManager{
-		LoadTests: make(map[uuid.UUID]*structs.LoadTest),
-		lock:      sync.RWMutex{},
+	MetricsManager = &LoadTestMetricsManager{
+		Metrics: make(map[uint]*map[int64][]structs.ResponseFragment),
+		lock:    sync.RWMutex{},
 	}
 }
 
-func NewLoadTest(id uuid.UUID, loadTestName string, url string, duration, virtualUsers int) {
+func GetLoadTest(id uuid.UUID) (structs.LoadTestModel, error) {
+	var loadTest structs.LoadTestModel
+	result := initializers.DB.Preload("TestPlan").Preload("LoadTests").Preload("LoadTests.TestMetrics").Find(&loadTest, "UUID = ?", id)
 
-	LoadManager.lock.Lock()
-	defer LoadManager.lock.Unlock()
-
-	LoadManager.LoadTests[id] = &structs.LoadTest{
-		ID:           id,
-		Name:         loadTestName,
-		State:        structs.Pending,
-		CreatedAt:    time.Now(),
-		LastUpdateAt: time.Now(),
-		Metrics:      structs.LoadTestMetrics{},
-		LoadTestPlan: structs.LoadTestPlan{
-			URL:          url,
-			Duration:     duration,
-			VirtualUsers: virtualUsers,
-		},
+	if result.Error != nil {
+		return structs.LoadTestModel{}, errors.New("load test with id not found")
 	}
 
-	log.Infof("New load test created with ID: %s", id.String())
+	return loadTest, nil
 }
 
-// ToDo: trigger this
-func UpdateLoadTestState(id uuid.UUID, state structs.LoadTestState) {
-	LoadManager.lock.Lock()
-	defer LoadManager.lock.Unlock()
+func GetLoadTestsTest(id uint) (structs.LoadTestTestsModel, error) {
+	var loadTest structs.LoadTestTestsModel
+	result := initializers.DB.Preload("TestMetrics").First(&loadTest, id)
 
-	if test, exists := LoadManager.LoadTests[id]; exists {
-
-		if test.State == state {
-			log.Warnf("Load test with ID %s is already in state %s", id, state)
-			return
-		}
-
-		switch state {
-		case structs.Running:
-			test.State = state
-			test.LastUpdateAt = time.Now()
-			test.LoadTestPlan.StartedAt = time.Now()
-
-			initializers.InitalizeTest(test, GetAvailableWorkers())
-
-			log.Infof("Load test with ID %s is now running", id)
-
-		case structs.Cancelled:
-			test.State = state
-			test.LastUpdateAt = time.Now()
-
-			initializers.CancelTest(id, GetAvailableWorkers())
-
-			log.Infof("Load test with ID %s has been cancelled", id)
-
-		case structs.Completed:
-			test.State = state
-			test.LastUpdateAt = time.Now()
-			log.Infof("Load test with ID %s has completed", id)
-		case structs.Pending:
-			test.State = state
-			test.LastUpdateAt = time.Now()
-			log.Infof("Load test with ID %s is now pending", id)
-		default:
-			log.Errorf("Invalid state %s for load test with ID %s", state, id)
-		}
+	if result.Error != nil {
+		return structs.LoadTestTestsModel{}, errors.New("load test's test with id not found")
 	}
+
+	return loadTest, nil
 }
 
-func AggregateMetrics(id uuid.UUID, responseFragments []structs.ResponseFragment, reportedAt int64) {
+func StartLoadTest(loadTest structs.LoadTestModel, duration int, virtualUsers int, loadTestType structs.LoadTestType) (structs.LoadTestTestsModel, error) {
+	log.Infof("Starting load test with ID %s", loadTest.UUID)
+
+	testMetrics := structs.LoadTestMetricsModel{
+		TotalRequests:       0,
+		SuccessfulRequests:  0,
+		FailedRequests:      0,
+		TotalResponseTime:   0,
+		AverageResponseTime: 0,
+	}
+
+	if err := initializers.DB.Save(&testMetrics).Error; err != nil {
+		log.Errorf("Error saving test metrics: %s", err)
+		return structs.LoadTestTestsModel{}, err
+	}
+
+	newTest := structs.LoadTestTestsModel{
+		LoadTestModelId: loadTest.ID,
+		State:           structs.Running,
+		Duration:        duration,
+		VirtualUsers:    virtualUsers,
+		LoadTestType:    loadTestType,
+		TestMetrics:     testMetrics,
+	}
+
+	if err := initializers.DB.Save(&newTest).Error; err != nil {
+		log.Errorf("Error starting load test: %s", err)
+		return structs.LoadTestTestsModel{}, err
+	}
+
+	log.Infof("Load test with ID %s started", loadTest.UUID)
+
+	// Create callback to provide to avoid import cycle
+	completionCallback := func(testModel structs.LoadTestTestsModel) error {
+		_, err := CompleteLoadTestByTestModel(testModel)
+		return err
+	}
+
+	initializers.InitalizeTest(&newTest, GetAvailableWorkers(), completionCallback)
+	return newTest, nil
+}
+
+func StopLoadTest(loadTest structs.LoadTestModel) (structs.LoadTestTestsModel, error) {
+	var loadTestsTest structs.LoadTestTestsModel
+	updateResult := initializers.DB.Model(&loadTestsTest).Where("LoadTestModelId = ? AND State = ?", loadTest.ID, structs.Running).Update("State", structs.Cancelled)
+
+	if updateResult.Error != nil {
+		return structs.LoadTestTestsModel{}, updateResult.Error
+	}
+
+	initializers.CancelTest(loadTestsTest, GetAvailableWorkers())
+
+	return loadTestsTest, nil
+}
+
+func StopLoadTestByTestModel(loadTestsTest structs.LoadTestTestsModel) (structs.LoadTestTestsModel, error) {
+	updateResult := initializers.DB.Model(&loadTestsTest).Where("State = ?", structs.Running).Update("State", structs.Cancelled)
+
+	if updateResult.Error != nil {
+		return structs.LoadTestTestsModel{}, updateResult.Error
+	}
+
+	initializers.CancelTest(loadTestsTest, GetAvailableWorkers())
+
+	return loadTestsTest, nil
+}
+
+func CompleteLoadTest(loadTest structs.LoadTestModel) (structs.LoadTestTestsModel, error) {
+	var loadTestsTest structs.LoadTestTestsModel
+	updateResult := initializers.DB.Model(&loadTestsTest).Where("LoadTestModelId = ? AND State = ?", loadTest.ID, structs.Running).Update("State", structs.Completed)
+
+	if updateResult.Error != nil {
+		return structs.LoadTestTestsModel{}, updateResult.Error
+	}
+
+	return loadTestsTest, nil
+}
+
+func CompleteLoadTestByTestModel(loadTestsTest structs.LoadTestTestsModel) (structs.LoadTestTestsModel, error) {
+	updateResult := initializers.DB.Model(&loadTestsTest).Where("State = ?", structs.Running).Update("State", structs.Completed)
+
+	if updateResult.Error != nil {
+		return structs.LoadTestTestsModel{}, updateResult.Error
+	}
+
+	return loadTestsTest, nil
+}
+
+func AggregateMetrics(testId uint, responseFragments []structs.ResponseFragment, reportedAt int64) {
 
 	var totalSuccessRequests int
 	var totalFailedRequests int
@@ -107,40 +152,57 @@ func AggregateMetrics(id uuid.UUID, responseFragments []structs.ResponseFragment
 		totalResponseTime += fragment.ResponseTime
 	}
 
-	LoadManager.lock.Lock()
-	defer LoadManager.lock.Unlock()
-
-	if test, exists := LoadManager.LoadTests[id]; exists {
-
-		// Calculate elapsed time
-		startTime := test.LoadTestPlan.StartedAt.UnixNano() / int64(time.Millisecond)
-		elapsedSeconds := (reportedAt - startTime) / 1000
-
-		log.Infof("Aggregating metrics for load test with ID %s at %d seconds for timestamp %d", id, elapsedSeconds, reportedAt)
-
-		if test.Metrics.Metrics == nil {
-			test.Metrics.Metrics = make(map[int64][]structs.ResponseFragment)
-		}
-
-		// append metrics (as there can be multiple workers reporting at the same time)
-		test.Metrics.Metrics[elapsedSeconds] = append(test.Metrics.Metrics[elapsedSeconds], responseFragments...)
-
-		totalRequests := test.Metrics.GlobalMetrics.TotalRequests + int(len(responseFragments))
-		totalResponseTime := test.Metrics.GlobalMetrics.TotalResponseTime + totalResponseTime
-
-		newMetrics := structs.LoadTestMetricSummary{
-			TotalRequests:       totalRequests,
-			SuccessfulRequests:  test.Metrics.GlobalMetrics.SuccessfulRequests + totalSuccessRequests,
-			FailedRequests:      test.Metrics.GlobalMetrics.FailedRequests + totalFailedRequests,
-			TotalResponseTime:   totalResponseTime,
-			AverageResponseTime: totalResponseTime / int64(totalRequests),
-		}
-
-		test.Metrics.GlobalMetrics = newMetrics
-		test.LastUpdateAt = time.Now()
-
-	} else {
-		log.Errorf("Load test with ID %s not found for metrics aggregation", id)
+	testsTest, err := GetLoadTestsTest(testId)
+	if err != nil {
+		log.Errorf("Load test's test with ID %d not found for metrics aggregation (sql)", testId)
+		log.Errorf("It's error: %s", err.Error())
+		return
 	}
 
+	// Calculate elapsed time
+	startTime := testsTest.CreatedAt.UnixNano() / int64(time.Millisecond)
+	elapsedSeconds := (reportedAt - startTime) / 1000
+
+	log.Infof("Aggregating metrics for load test with ID %d at %d seconds for timestamp %d", testId, elapsedSeconds, reportedAt)
+
+	// Local metrics
+
+	MetricsManager.lock.Lock()
+	defer MetricsManager.lock.Unlock()
+
+	if _, exists := MetricsManager.Metrics[testId]; !exists {
+		log.Errorf("Load test with ID %d not found for metrics aggregation (local)", testId)
+		MetricsManager.Metrics[testId] = &map[int64][]structs.ResponseFragment{}
+	}
+
+	// Append metrics to map
+	metricsMap := *MetricsManager.Metrics[testId]
+	metricsMap[elapsedSeconds] = append(metricsMap[elapsedSeconds], responseFragments...)
+
+	// Global metrics
+
+	totalRequests := testsTest.TestMetrics.TotalRequests + int(len(responseFragments))
+	totalResponseTime = (testsTest.TestMetrics.TotalResponseTime + totalResponseTime)
+
+	testsTest.TestMetrics.LoadTestTestsModelID = testsTest.ID
+
+	if testsTest.TestMetrics.ID != 0 {
+		err := initializers.DB.Model(&testsTest.TestMetrics).Updates(structs.LoadTestMetricsModel{
+			TotalRequests:       totalRequests,
+			SuccessfulRequests:  testsTest.TestMetrics.SuccessfulRequests + totalSuccessRequests,
+			FailedRequests:      testsTest.TestMetrics.FailedRequests + totalFailedRequests,
+			TotalResponseTime:   totalResponseTime,
+			AverageResponseTime: totalResponseTime / int64(totalRequests),
+		}).Error
+
+		if err != nil {
+			log.Errorf("Error updating load test metrics: %s", err)
+			return
+		}
+
+	} else {
+		log.Error("TestMetrics does not have a valid ID, indicating it may not exist in the database.")
+	}
+
+	log.Infof("Aggregated metrics for load test with ID %d at %d seconds for timestamp %d", testId, elapsedSeconds, reportedAt)
 }

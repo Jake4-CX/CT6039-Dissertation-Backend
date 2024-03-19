@@ -12,14 +12,14 @@ type ResponseItem struct {
 	Body         string
 }
 
-type LoadTestState string
+// type LoadTestState string
 
-const (
-	Pending   LoadTestState = "PENDING"
-	Running   LoadTestState = "RUNNING"
-	Cancelled LoadTestState = "CANCELLED"
-	Completed LoadTestState = "COMPLETED"
-)
+// const (
+// 	Pending   LoadTestState = "PENDING"
+// 	Running   LoadTestState = "RUNNING"
+// 	Cancelled LoadTestState = "CANCELLED"
+// 	Completed LoadTestState = "COMPLETED"
+// )
 
 type LoadTest struct {
 	ID           uuid.UUID       `json:"id"` // A unique identifier for the load test
@@ -45,7 +45,7 @@ type LoadTestMetrics struct {
 
 type LoadTestWorkerMetrics struct {
 	WorkerID          string             `json:"workerId"`
-	LoadTestID        string             `json:"loadTestId"`
+	LoadTestID        uint               `json:"loadTestId"`
 	Timestamp         int64              `json:"timestamp"`
 	ResponseFragments []ResponseFragment `json:"loadTestMetricFragments"`
 }

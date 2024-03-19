@@ -97,8 +97,9 @@ func (t *TreeNode) UnmarshalJSON(data []byte) error {
 
 // ReactFlow structs
 type ReactFlow struct {
-	Edges []FlowEdge `json:"edges"`
-	Nodes []FlowNode `json:"nodes"`
+	Edges    []FlowEdge `json:"edges"`
+	Nodes    []FlowNode `json:"nodes"`
+	Viewport Viewport   `json:"viewport"`
 }
 
 type FlowEdge struct {
@@ -110,20 +111,26 @@ type FlowEdge struct {
 }
 
 type FlowNode struct {
-	ID       string `json:"id"`
-	Type     string `json:"type"`
-	Data     interface{}
+	ID       string      `json:"id"`
+	Type     string      `json:"type"`
+	Data     interface{} `json:"data"`
 	Position struct {
 		X float64 `json:"x"`
 		Y float64 `json:"y"`
-	}
+	} `json:"position"`
 	PositionAbsolute struct {
 		X float64 `json:"x"`
 		Y float64 `json:"y"`
-	}
+	} `json:"PositionAbsolute"`
 	Width       float64 `json:"width"`
 	Height      float64 `json:"height"`
 	Connectable bool    `json:"connectable"`
+}
+
+type Viewport struct {
+	X    float64 `json:"x"`
+	Y    float64 `json:"y"`
+	Zoom float64 `json:"zoom"`
 }
 
 type UpdateTestPlanRequest struct {

@@ -11,7 +11,7 @@ import (
 	"github.com/streadway/amqp"
 )
 
-func ReportMetricsPeriodically(ctx context.Context, workerID string, responseChannel <-chan structs.ResponseItem, duration int, loadTestID string) {
+func ReportMetricsPeriodically(ctx context.Context, workerID string, responseChannel <-chan structs.ResponseItem, duration int, loadTestID uint) {
 	ticker := time.NewTicker(1000 * time.Millisecond)
 	defer ticker.Stop()
 

@@ -13,14 +13,14 @@ import (
 
 // LoadTestExecutorService is a service that executes a load test
 
-func ExecuteLoadTest(config structs.Task, workerID string, loadTestID string) structs.LoadTestMetricSummary {
-	log.Infof("Executing load test with config: %+v", config)
+func ExecuteLoadTest(assignment structs.TaskAssignment) structs.LoadTestMetricSummary {
+	log.Infof("Executing load test with config: %+v", assignment)
 
-	if config.Duration < 1000 {
+	if assignment.LoadTestTestsModel.Duration < 1000 {
 		log.Warnf("Duration too short, adjusting to minimum of 1000 milliseconds")
-		config.Duration = 1000
+		assignment.LoadTestTestsModel.Duration = 1000
 	}
-	if config.VirtualUsers <= 0 {
+	if assignment.LoadTestTestsModel.VirtualUsers <= 0 {
 		log.Errorf("VirtualUsers must be greater than 0")
 		return structs.LoadTestMetricSummary{}
 	}
@@ -32,19 +32,17 @@ func ExecuteLoadTest(config structs.Task, workerID string, loadTestID string) st
 	var wg sync.WaitGroup
 	responseChannel := make(chan structs.ResponseItem, 100)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(config.Duration)*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(assignment.LoadTestTestsModel.Duration)*time.Millisecond)
 	defer cancel()
 
-	state.LoadTestCancellers.Store(loadTestID, cancel)
-
-	log.Infof("Virtual Users for this load test: %d", config.VirtualUsers)
+	state.LoadTestCancellers.Store(assignment.LoadTestTestsModel.ID, cancel)
 
 	// Start reporting metrics periodically
-	go ReportMetricsPeriodically(ctx, workerID, responseChannel, config.Duration, loadTestID)
+	go ReportMetricsPeriodically(ctx, assignment.AssignedWorkerID, responseChannel, assignment.LoadTestTestsModel.Duration, assignment.LoadTestTestsModel.ID)
 
 	testStartTime := time.Now()
 
-	for i := 0; i < config.VirtualUsers; i++ {
+	for i := 0; i < assignment.LoadTestTestsModel.VirtualUsers; i++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -55,7 +53,7 @@ func ExecuteLoadTest(config structs.Task, workerID string, loadTestID string) st
 					return
 				default:
 					// Make request
-					makeAsyncRequest(ctx, client, config.URL, responseChannel)
+					makeAsyncRequest(ctx, client, "https://beta.kickable.net", responseChannel)
 					time.Sleep(1 * time.Second) // Wait for 1 second before making the next request.
 				}
 			}
