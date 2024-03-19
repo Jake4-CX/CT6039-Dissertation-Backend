@@ -39,7 +39,17 @@ func GetLoadTest(c *gin.Context) {
 		return
 	}
 
-	c.JSON(200, result)
+	testsMetrics := make(map[uint]*map[int64][]structs.ResponseFragment, 0)
+
+	for _, loadTestsTest := range result.LoadTests {
+		testMetrics, _ := managers.GetLoadTestsTestFullMetrics(loadTestsTest)
+
+		if testMetrics != nil {
+			testsMetrics[loadTestsTest.ID] = testMetrics
+		}
+	}
+
+	c.JSON(200, gin.H{"test": result, "testMetrics": testsMetrics})
 }
 
 func CreateLoadTest(c *gin.Context) {

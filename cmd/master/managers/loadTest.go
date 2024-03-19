@@ -47,6 +47,17 @@ func GetLoadTestsTest(id uint) (structs.LoadTestTestsModel, error) {
 	return loadTest, nil
 }
 
+func GetLoadTestsTestFullMetrics(testTests structs.LoadTestTestsModel) (*map[int64][]structs.ResponseFragment, error) {
+	MetricsManager.lock.RLock()
+	defer MetricsManager.lock.RUnlock()
+
+	if values, exists := MetricsManager.Metrics[testTests.ID]; exists {
+		return values, nil
+	}
+
+	return nil, errors.New("metrics not found")
+}
+
 func GetRunningLoadTests() ([]structs.LoadTestTestsModel, error) { // Get all running tests
 	var loadTests []structs.LoadTestTestsModel
 	result := initializers.DB.Preload("LoadTests").Preload("TestMetrics").Where("State = ?", structs.Running).Find(&loadTests)
