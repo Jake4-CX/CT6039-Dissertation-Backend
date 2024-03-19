@@ -64,7 +64,7 @@ func CreateLoadTest(c *gin.Context) {
 	}
 
 	loadTestEntry := structs.LoadTestModel{
-		Name:  newLoadTest.Name,
+		Name: newLoadTest.Name,
 		TestPlan: structs.LoadTestPlanModel{
 			ReactFlowPlan: reactFlowPlan,
 			TestPlan:      testPlan,
@@ -136,6 +136,13 @@ func StartLoadTest(c *gin.Context) {
 	}
 
 	// Start load test
+
+	runningTests := managers.GetRunningLoadTestsByLoadTest(loadTest)
+	if len(runningTests) > 0 {
+		c.JSON(400, gin.H{"error": "A Load test is already running for this test plan"})
+		return
+	}
+
 	result, err := managers.StartLoadTest(loadTest, newLoadTestExecution.Duration, newLoadTestExecution.VirtualUsers, newLoadTestExecution.LoadTestType)
 
 	if err != nil {

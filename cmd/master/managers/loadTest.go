@@ -47,6 +47,29 @@ func GetLoadTestsTest(id uint) (structs.LoadTestTestsModel, error) {
 	return loadTest, nil
 }
 
+func GetRunningLoadTests() ([]structs.LoadTestTestsModel, error) { // Get all running tests
+	var loadTests []structs.LoadTestTestsModel
+	result := initializers.DB.Preload("LoadTests").Preload("TestMetrics").Where("State = ?", structs.Running).Find(&loadTests)
+
+	if result.Error != nil {
+		return []structs.LoadTestTestsModel{}, result.Error
+	}
+
+	return loadTests, nil
+}
+
+func GetRunningLoadTestsByLoadTest(loadTest structs.LoadTestModel) []structs.LoadTestTestsModel { // Get all running tests for a particular load test
+	runningTests := make([]structs.LoadTestTestsModel, 0)
+
+	for _, loadTestTest := range loadTest.LoadTests {
+		if loadTestTest.State == structs.Running {
+			runningTests = append(runningTests, loadTestTest)
+		}
+	}
+
+	return runningTests
+}
+
 func StartLoadTest(loadTest structs.LoadTestModel, duration int, virtualUsers int, loadTestType structs.LoadTestType) (structs.LoadTestTestsModel, error) {
 	log.Infof("Starting load test with ID %s", loadTest.UUID)
 
