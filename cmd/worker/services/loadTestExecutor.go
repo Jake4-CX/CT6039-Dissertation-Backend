@@ -1,8 +1,11 @@
 package services
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -10,8 +13,6 @@ import (
 	"github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/pkg/structs"
 	log "github.com/sirupsen/logrus"
 )
-
-// LoadTestExecutorService is a service that executes a load test
 
 func ExecuteLoadTest(assignment structs.TaskAssignment) structs.LoadTestMetricSummary {
 	log.Infof("Executing load test with config: %+v", assignment)
@@ -53,8 +54,18 @@ func ExecuteLoadTest(assignment structs.TaskAssignment) structs.LoadTestMetricSu
 					return
 				default:
 					// Make request
-					makeAsyncRequest(ctx, client, "https://beta.kickable.net", responseChannel)
-					time.Sleep(1 * time.Second) // Wait for 1 second before making the next request.
+
+					var testPlan []structs.TreeNode
+					if err := json.Unmarshal([]byte(assignment.LoadTestPlanModel.TestPlan), &testPlan); err != nil {
+						log.Errorf("Failed to parse test plan: %v", err)
+						return
+					}
+
+					// Execute the test plan nodes
+					for _, node := range testPlan {
+						executeTreeNode(ctx, node, client, &LastRequestInfo{}, responseChannel)
+						log.Infof("Finished executing test plan node (VirtualUser ID: %d)", i)
+					}
 				}
 			}
 		}()
@@ -88,30 +99,150 @@ func collectMetrics(responseChannel <-chan structs.ResponseItem) structs.LoadTes
 	return metrics
 }
 
-func makeAsyncRequest(ctx context.Context, client *http.Client, url string, responseChannel chan<- structs.ResponseItem) {
+func makeRequest(ctx context.Context, client *http.Client, url string, method string, requestBody []byte, responseChannel chan<- structs.ResponseItem) (lastRequestInfo LastRequestInfo) {
+	var req *http.Request
+	var err error
 
-	req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+	if len(requestBody) > 0 {
+		req, err = http.NewRequestWithContext(ctx, method, url, bytes.NewBuffer(requestBody))
+	} else {
+		req, err = http.NewRequestWithContext(ctx, method, url, nil)
+	}
+
 	if err != nil {
 		log.Errorf("Failed to create request: %s", err)
 		responseChannel <- structs.ResponseItem{StatusCode: 0, ResponseTime: 0}
-		return
+		return LastRequestInfo{}
 	}
 
 	start := time.Now()
 	resp, err := client.Do(req)
-	elapsed := time.Since(start)
+	elapsed := time.Since(start).Milliseconds()
 
 	if err != nil {
-		log.Errorf("Request to %s failed: %s", url, err)
-		responseChannel <- structs.ResponseItem{StatusCode: 0, ResponseTime: elapsed.Milliseconds()}
-		return
+		log.Errorf("Failed to execute request: %s", err)
+		responseChannel <- structs.ResponseItem{StatusCode: 0, ResponseTime: elapsed}
+		return LastRequestInfo{}
 	}
 	defer resp.Body.Close()
 
-	log.Infof("Request to %s completed in %s with status code %d", url, elapsed, resp.StatusCode)
+	responseSize := resp.ContentLength
+	responseChannel <- structs.ResponseItem{StatusCode: resp.StatusCode, ResponseTime: elapsed}
 
-	responseChannel <- structs.ResponseItem{
-		StatusCode:   resp.StatusCode,
-		ResponseTime: elapsed.Milliseconds(),
+	return LastRequestInfo{
+		ResponseCode: resp.StatusCode,
+		ResponseTime: elapsed,
+		ResponseSize: responseSize,
+	}
+}
+
+type LastRequestInfo struct {
+	ResponseCode int
+	ResponseTime int64
+	ResponseSize int64
+}
+
+func executeTreeNode(ctx context.Context, node structs.TreeNode, client *http.Client, lastRequestInfo *LastRequestInfo, responseChannel chan<- structs.ResponseItem) {
+	switch node.Type {
+	case structs.GetRequest:
+		getRequestNode, ok := node.Data.(*structs.GetRequestNodeData)
+		if !ok {
+			log.Errorf("Failed to cast node data to GetRequestNodeData")
+			break
+		}
+		log.Infof("Making GET request to %s", getRequestNode.URL)
+
+		*lastRequestInfo = makeRequest(ctx, client, getRequestNode.URL, "GET", nil, responseChannel)
+
+	case structs.PostRequest:
+		postRequestNode, ok := node.Data.(*structs.PostRequestNodeData)
+		if !ok {
+			log.Errorf("Failed to cast node data to PostRequestNodeData")
+			break
+		}
+		log.Infof("Making POST request to %s with body: %s", postRequestNode.URL, postRequestNode.Body)
+
+		*lastRequestInfo = makeRequest(ctx, client, postRequestNode.URL, "POST", []byte(postRequestNode.Body), responseChannel)
+
+	case structs.IfCondition:
+		ifConditionNode, ok := node.Data.(*structs.IfConditionNodeData)
+		if !ok {
+			log.Errorf("Failed to cast node data to IfConditionNodeData")
+			break
+		}
+		log.Infof("Evaluating if condition at node %s", ifConditionNode.Label)
+		log.Infof("Field: %s, Condition: %s, Value: %s", ifConditionNode.Field, ifConditionNode.Condition, ifConditionNode.Value)
+
+		if evaluateField(ifConditionNode, lastRequestInfo) {
+			for _, children := range node.Conditions.TrueChildren {
+				executeTreeNode(ctx, children, client, lastRequestInfo, responseChannel)
+			}
+		} else {
+			for _, children := range node.Conditions.FalseChildren {
+				executeTreeNode(ctx, children, client, lastRequestInfo, responseChannel)
+			}
+		}
+
+	case structs.StartNode:
+		startNode, ok := node.Data.(*structs.StartNodeData)
+		if !ok {
+			log.Errorf("Failed to cast node data to StartNodeData")
+			break
+		}
+		log.Infof("Starting load test at node %s", startNode.Label)
+
+	case structs.StopNode:
+		stopNode, ok := node.Data.(*structs.StopNodeData)
+		if !ok {
+			log.Errorf("Failed to cast node data to StopNodeData")
+			break
+		}
+
+		log.Infof("Stopping load test at node %s", stopNode.Label)
+		return
+	}
+
+	if node.Type != "ifCondition" {
+		for _, children := range node.Children {
+			executeTreeNode(ctx, children, client, lastRequestInfo, responseChannel)
+		}
+	}
+}
+
+func evaluateField(node *structs.IfConditionNodeData, info *LastRequestInfo) bool {
+
+	switch node.Field {
+	case "response_code":
+		return evaluateCondition(node, info.ResponseCode)
+	case "response_time":
+		return evaluateCondition(node, int(info.ResponseTime))
+	case "response_size":
+		return evaluateCondition(node, int(info.ResponseSize))
+	default:
+		log.Errorf("Unknown field: %s", node.Field)
+		return false
+	}
+}
+
+func evaluateCondition(node *structs.IfConditionNodeData, value int) bool {
+
+	compareValue, err := strconv.Atoi(node.Value)
+	if err != nil {
+		log.Errorf("Failed to parse value to int: %s", err)
+		return false
+	}
+
+	switch node.Condition {
+	case "equals":
+		return value == compareValue
+	case "not_equals":
+		return value != compareValue
+	case "greater_than":
+		return value > compareValue
+	case "less_than":
+		return value < compareValue
+	default:
+		log.Errorf("Unknown condition: %s", node.Condition)
+		return false
 	}
 }

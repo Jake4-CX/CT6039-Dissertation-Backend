@@ -119,7 +119,7 @@ func StartLoadTest(loadTest structs.LoadTestModel, duration int, virtualUsers in
 		return err
 	}
 
-	initializers.InitalizeTest(&newTest, GetAvailableWorkers(), completionCallback)
+	initializers.InitalizeTest(&newTest, loadTest.TestPlan, GetAvailableWorkers(), completionCallback)
 	return newTest, nil
 }
 
@@ -173,7 +173,6 @@ func AggregateMetrics(testId uint, responseFragments []structs.ResponseFragment,
 
 	var totalSuccessRequests int
 	var totalFailedRequests int
-
 	var totalResponseTime int64
 
 	// Preprocessing:
@@ -216,27 +215,27 @@ func AggregateMetrics(testId uint, responseFragments []structs.ResponseFragment,
 	// Global metrics
 
 	totalRequests := testsTest.TestMetrics.TotalRequests + int(len(responseFragments))
-	totalResponseTime = (testsTest.TestMetrics.TotalResponseTime + totalResponseTime)
 
-	testsTest.TestMetrics.LoadTestTestsModelID = testsTest.ID
+	if totalRequests > 0 {
+		averageResponseTime := totalResponseTime / int64(totalRequests)
 
-	if testsTest.TestMetrics.ID != 0 {
 		err := initializers.DB.Model(&testsTest.TestMetrics).Updates(structs.LoadTestMetricsModel{
 			TotalRequests:       totalRequests,
 			SuccessfulRequests:  testsTest.TestMetrics.SuccessfulRequests + totalSuccessRequests,
 			FailedRequests:      testsTest.TestMetrics.FailedRequests + totalFailedRequests,
 			TotalResponseTime:   totalResponseTime,
-			AverageResponseTime: totalResponseTime / int64(totalRequests),
+			AverageResponseTime: averageResponseTime,
 		}).Error
 
 		if err != nil {
 			log.Errorf("Error updating load test metrics: %s", err)
 			return
+		} else {
+			log.Infof("Metrics updated successfully for ID %d at %d seconds for timestamp %d", testId, elapsedSeconds, reportedAt)
 		}
 
 	} else {
-		log.Error("TestMetrics does not have a valid ID, indicating it may not exist in the database.")
+		log.Error("No requests were made, skipping metrics update.")
 	}
 
-	log.Infof("Aggregated metrics for load test with ID %d at %d seconds for timestamp %d", testId, elapsedSeconds, reportedAt)
 }

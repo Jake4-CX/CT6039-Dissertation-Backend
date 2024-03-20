@@ -5,9 +5,19 @@ import (
 	"errors"
 )
 
+type NodeType string
+
+const (
+	GetRequest  NodeType = "getRequest"
+	PostRequest NodeType = "postRequest"
+	IfCondition NodeType = "ifCondition"
+	StartNode   NodeType = "startNode"
+	StopNode    NodeType = "stopNode"
+)
+
 type TreeNode struct {
 	Name       string      `json:"name" binding:"required"`
-	Type       string      `json:"type" binding:"required"`
+	Type       NodeType      `json:"type" binding:"required"`
 	Data       NodeData    `json:"data" binding:"required"`
 	Children   []TreeNode  `json:"children" binding:"required"`
 	Conditions *Conditions `json:"conditions"`
@@ -22,37 +32,37 @@ type NodeData interface {
 	IsNodeData()
 }
 
-type GetRequestNode struct {
+type GetRequestNodeData struct {
 	Label string `json:"label" binding:"required"`
 	URL   string `json:"url" binding:"required"`
 }
 
-type PostRequestNode struct {
+type PostRequestNodeData struct {
 	Label string `json:"label" binding:"required"`
 	URL   string `json:"url" binding:"required"`
 	Body  string `json:"body" binding:"required"`
 }
 
-type IfConditionNode struct {
+type IfConditionNodeData struct {
 	Label     string `json:"label" binding:"required"`
 	Field     string `json:"field" binding:"required"`
 	Condition string `json:"condition" binding:"required"`
 	Value     string `json:"value" binding:"required"`
 }
 
-type StartNode struct {
+type StartNodeData struct {
 	Label string `json:"label" binding:"required"`
 }
 
-type StopNode struct {
+type StopNodeData struct {
 	Label string `json:"label" binding:"required"`
 }
 
-func (*GetRequestNode) IsNodeData()  {}
-func (*PostRequestNode) IsNodeData() {}
-func (*IfConditionNode) IsNodeData() {}
-func (*StartNode) IsNodeData()       {}
-func (*StopNode) IsNodeData()        {}
+func (*GetRequestNodeData) IsNodeData()  {}
+func (*PostRequestNodeData) IsNodeData() {}
+func (*IfConditionNodeData) IsNodeData() {}
+func (*StartNodeData) IsNodeData()       {}
+func (*StopNodeData) IsNodeData()        {}
 
 func (t *TreeNode) UnmarshalJSON(data []byte) error {
 	var raw struct {
@@ -69,15 +79,15 @@ func (t *TreeNode) UnmarshalJSON(data []byte) error {
 	var nodeData NodeData
 	switch raw.Type {
 	case "getRequest":
-		nodeData = &GetRequestNode{}
+		nodeData = &GetRequestNodeData{}
 	case "postRequest":
-		nodeData = &PostRequestNode{}
+		nodeData = &PostRequestNodeData{}
 	case "ifCondition":
-		nodeData = &IfConditionNode{}
+		nodeData = &IfConditionNodeData{}
 	case "startNode":
-		nodeData = &StartNode{}
+		nodeData = &StartNodeData{}
 	case "stopNode":
-		nodeData = &StopNode{}
+		nodeData = &StopNodeData{}
 	default:
 		return errors.New("unknown type")
 	}
@@ -88,7 +98,7 @@ func (t *TreeNode) UnmarshalJSON(data []byte) error {
 
 	// Populate the TreeNode fields.
 	t.Name = raw.Name
-	t.Type = raw.Type
+	t.Type = NodeType(raw.Type)
 	t.Data = nodeData
 	t.Children = raw.Children
 	t.Conditions = raw.Conditions

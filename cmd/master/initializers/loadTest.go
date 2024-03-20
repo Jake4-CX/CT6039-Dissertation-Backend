@@ -13,7 +13,7 @@ import (
 
 type CompletionCallback func(testModel structs.LoadTestTestsModel) error
 
-func InitalizeTest(loadTest *structs.LoadTestTestsModel, availableWorkers []*structs.Worker, onComplete CompletionCallback) {
+func InitalizeTest(loadTest *structs.LoadTestTestsModel, testPlan structs.LoadTestPlanModel, availableWorkers []*structs.Worker, onComplete CompletionCallback) {
 
 	log.Infof("Initializing load test with ID %d", loadTest.ID)
 
@@ -29,14 +29,13 @@ func InitalizeTest(loadTest *structs.LoadTestTestsModel, availableWorkers []*str
 			remainingUsers--
 		}
 
-		sendStartTaskToWorker(*loadTest, worker.ID)
+		sendStartTaskToWorker(*loadTest, testPlan, worker.ID)
 	}
 
-	// After duration (loadTest.Duration) has passed, mark the load test as complete
 	go func() {
 		duration := time.Duration(loadTest.Duration) * time.Millisecond
 		time.Sleep(duration)
-		
+
 		onComplete(*loadTest)
 
 		log.Infof("Test duration reached. Stopping load test ID %d", loadTest.ID)
@@ -51,10 +50,11 @@ func CancelTest(loadTestsTest structs.LoadTestTestsModel, availableWorkers []*st
 	}
 }
 
-func sendStartTaskToWorker(loadTest structs.LoadTestTestsModel, workerID string) {
+func sendStartTaskToWorker(loadTest structs.LoadTestTestsModel, testPlan structs.LoadTestPlanModel, workerID string) {
 
 	assignment := structs.TaskAssignment{
 		LoadTestTestsModel: loadTest,
+		LoadTestPlanModel:  testPlan,
 		AssignedWorkerID:   workerID,
 	}
 
