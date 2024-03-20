@@ -26,11 +26,7 @@ func HandleTaskCreated(d amqp.Delivery) {
 		return
 	}
 
-	log.Infof("Executing assigned task: %+v", assignment.LoadTestTestsModel)
-
-	metrics := services.ExecuteLoadTest(assignment)
-
-	log.Infof("Load test metrics: %+v", metrics)
+	services.ExecuteLoadTest(assignment)
 
 	log.Infof("Executed assigned task: %+v", assignment.LoadTestTestsModel)
 }

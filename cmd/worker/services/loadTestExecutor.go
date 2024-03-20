@@ -14,7 +14,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-func ExecuteLoadTest(assignment structs.TaskAssignment) structs.LoadTestMetricSummary {
+func ExecuteLoadTest(assignment structs.TaskAssignment) {
 	log.Infof("Executing load test with config: %+v", assignment)
 
 	if assignment.LoadTestTestsModel.Duration < 1000 {
@@ -23,7 +23,7 @@ func ExecuteLoadTest(assignment structs.TaskAssignment) structs.LoadTestMetricSu
 	}
 	if assignment.LoadTestTestsModel.VirtualUsers <= 0 {
 		log.Errorf("VirtualUsers must be greater than 0")
-		return structs.LoadTestMetricSummary{}
+		return
 	}
 
 	client := &http.Client{
@@ -74,29 +74,10 @@ func ExecuteLoadTest(assignment structs.TaskAssignment) structs.LoadTestMetricSu
 	wg.Wait()
 	close(responseChannel)
 
-	metrics := collectMetrics(responseChannel)
 	testDuration := time.Since(testStartTime)
 
-	log.Infof("Load test completed in %s. Metrics: %+v", testDuration, metrics)
-	return metrics
-}
-
-func collectMetrics(responseChannel <-chan structs.ResponseItem) structs.LoadTestMetricSummary {
-	var metrics structs.LoadTestMetricSummary
-	for item := range responseChannel {
-		metrics.TotalRequests++
-		metrics.TotalResponseTime += item.ResponseTime
-		if item.StatusCode >= 200 && item.StatusCode < 300 {
-			metrics.SuccessfulRequests++
-		} else {
-			metrics.FailedRequests++
-		}
-	}
-
-	if metrics.TotalRequests > 0 {
-		metrics.AverageResponseTime = metrics.TotalResponseTime / int64(metrics.TotalRequests)
-	}
-	return metrics
+	log.Infof("Load test completed in %s.", testDuration)
+	return
 }
 
 func makeRequest(ctx context.Context, client *http.Client, url string, method string, requestBody []byte, responseChannel chan<- structs.ResponseItem) (lastRequestInfo LastRequestInfo) {
