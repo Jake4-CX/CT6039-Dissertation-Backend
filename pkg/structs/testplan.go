@@ -6,18 +6,25 @@ import (
 )
 
 type NodeType string
+type DelayType string
 
 const (
 	GetRequest  NodeType = "getRequest"
 	PostRequest NodeType = "postRequest"
 	IfCondition NodeType = "ifCondition"
+	DelayNode   NodeType = "delayNode"
 	StartNode   NodeType = "startNode"
 	StopNode    NodeType = "stopNode"
 )
 
+const (
+	Fixed  DelayType = "FIXED"
+	Random DelayType = "RANDOM"
+)
+
 type TreeNode struct {
 	Name       string      `json:"name" binding:"required"`
-	Type       NodeType      `json:"type" binding:"required"`
+	Type       NodeType    `json:"type" binding:"required"`
 	Data       NodeData    `json:"data" binding:"required"`
 	Children   []TreeNode  `json:"children" binding:"required"`
 	Conditions *Conditions `json:"conditions"`
@@ -50,6 +57,16 @@ type IfConditionNodeData struct {
 	Value     string `json:"value" binding:"required"`
 }
 
+type DelayNodeData struct {
+	Label       string    `json:"label" binding:"required"`
+	DelayType   DelayType `json:"delayType" binding:"required"`
+	FixedDelay  int       `json:"fixedDelay" binding:"required"`
+	RandomDelay struct {
+		Min int `json:"min" binding:"required"`
+		Max int `json:"max" binding:"required"`
+	} `json:"randomDelay" binding:"required"`
+}
+
 type StartNodeData struct {
 	Label string `json:"label" binding:"required"`
 }
@@ -61,6 +78,7 @@ type StopNodeData struct {
 func (*GetRequestNodeData) IsNodeData()  {}
 func (*PostRequestNodeData) IsNodeData() {}
 func (*IfConditionNodeData) IsNodeData() {}
+func (*DelayNodeData) IsNodeData()       {}
 func (*StartNodeData) IsNodeData()       {}
 func (*StopNodeData) IsNodeData()        {}
 
@@ -84,6 +102,8 @@ func (t *TreeNode) UnmarshalJSON(data []byte) error {
 		nodeData = &PostRequestNodeData{}
 	case "ifCondition":
 		nodeData = &IfConditionNodeData{}
+	case "delayNode":
+		nodeData = &DelayNodeData{}
 	case "startNode":
 		nodeData = &StartNodeData{}
 	case "stopNode":

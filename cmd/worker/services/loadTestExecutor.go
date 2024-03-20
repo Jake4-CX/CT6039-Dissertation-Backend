@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"math/rand"
 	"net/http"
 	"strconv"
 	"sync"
@@ -77,7 +78,6 @@ func ExecuteLoadTest(assignment structs.TaskAssignment) {
 	testDuration := time.Since(testStartTime)
 
 	log.Infof("Load test completed in %s.", testDuration)
-	return
 }
 
 func makeRequest(ctx context.Context, client *http.Client, url string, method string, requestBody []byte, responseChannel chan<- structs.ResponseItem) (lastRequestInfo LastRequestInfo) {
@@ -162,6 +162,24 @@ func executeTreeNode(ctx context.Context, node structs.TreeNode, client *http.Cl
 			for _, children := range node.Conditions.FalseChildren {
 				executeTreeNode(ctx, children, client, lastRequestInfo, responseChannel)
 			}
+		}
+	case structs.DelayNode:
+		delayNode, ok := node.Data.(*structs.DelayNodeData)
+		if !ok {
+			log.Errorf("Failed to cast node data to DelayNodeData")
+			break
+		}
+
+		switch delayNode.DelayType {
+		case structs.Fixed:
+			log.Infof("Delaying for %d milliseconds", delayNode.FixedDelay)
+			time.Sleep(time.Duration(delayNode.FixedDelay) * time.Millisecond)
+		case structs.Random:
+			randomDelay := time.Duration(rand.Intn(delayNode.RandomDelay.Max-delayNode.RandomDelay.Min) + delayNode.RandomDelay.Min)
+			log.Infof("Delaying for %d milliseconds", randomDelay)
+			time.Sleep(randomDelay * time.Millisecond)
+		default:
+			log.Errorf("Unknown delay type: %s", delayNode.DelayType)
 		}
 
 	case structs.StartNode:
