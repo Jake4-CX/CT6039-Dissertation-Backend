@@ -123,9 +123,8 @@ func StartLoadTest(loadTest structs.LoadTestModel, duration int, virtualUsers in
 	return newTest, nil
 }
 
-func StopLoadTest(loadTest structs.LoadTestModel) (structs.LoadTestTestsModel, error) {
-	var loadTestsTest structs.LoadTestTestsModel
-	updateResult := initializers.DB.Model(&loadTestsTest).Where("LoadTestModelId = ? AND State = ?", loadTest.ID, structs.Running).Update("State", structs.Cancelled)
+func StopLoadTest(loadTestsTest structs.LoadTestTestsModel) (structs.LoadTestTestsModel, error) {
+	updateResult := initializers.DB.Model(&loadTestsTest).Update("State", structs.Cancelled)
 
 	if updateResult.Error != nil {
 		return structs.LoadTestTestsModel{}, updateResult.Error

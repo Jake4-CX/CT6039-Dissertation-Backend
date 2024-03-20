@@ -12,7 +12,7 @@ import (
 )
 
 func HandleTaskCreated(d amqp.Delivery) {
-	log.Infof("Received message: %s", string(d.Body))
+	// log.Infof("Received message: %s", string(d.Body))
 
 	var assignment structs.TaskAssignment
 	err := json.Unmarshal(d.Body, &assignment)
@@ -32,22 +32,19 @@ func HandleTaskCreated(d amqp.Delivery) {
 }
 
 func HandleTaskCancelled(d amqp.Delivery) {
-	log.Infof("Received message: %s", string(d.Body))
+	// log.Infof("Received message: %s", string(d.Body))
 
-	var loadTest struct {
-		LoadTestID       string `json:"loadTestId"`
-		AssignedWorkerID string `json:"assignedWorkerId"`
-	}
-	err := json.Unmarshal(d.Body, &loadTest)
+	var assignment structs.TaskAssignment
+	err := json.Unmarshal(d.Body, &assignment)
 	if err != nil {
-		log.Errorf("Error unmarshalling load test ID: %s", err)
+		log.Errorf("Error unmarshalling task assignment: %s", err)
 		return
 	}
 
-	log.Infof("Cancelling load test with ID: %s", loadTest.LoadTestID)
+	log.Infof("Cancelling load test with ID: %d", assignment.LoadTestTestsModel.ID)
 
-	if cancelFunc, ok := state.LoadTestCancellers.Load(loadTest.LoadTestID); ok {
+	if cancelFunc, ok := state.LoadTestCancellers.Load(assignment.LoadTestTestsModel.ID); ok {
 		cancelFunc.(context.CancelFunc)()
-		state.LoadTestCancellers.Delete(loadTest.LoadTestID)
+		state.LoadTestCancellers.Delete(assignment.LoadTestTestsModel.ID)
 	}
 }

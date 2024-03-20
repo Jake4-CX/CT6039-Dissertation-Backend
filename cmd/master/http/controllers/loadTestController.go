@@ -180,12 +180,20 @@ func StopLoadTest(c *gin.Context) {
 		return
 	}
 
-	// Stop load test
-	result, err := managers.StopLoadTest(loadTest)
-
-	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to stop load test", "message": err.Error()})
+	runningTests := managers.GetRunningLoadTestsByLoadTest(loadTest)
+	if len(runningTests) == 0 {
+		c.JSON(400, gin.H{"error": "No running load tests for this test plan"})
 		return
+	}
+
+	var result structs.LoadTestTestsModel
+
+	for _, runningTest := range runningTests {
+		result, err = managers.StopLoadTest(runningTest)
+		if err != nil {
+			c.JSON(500, gin.H{"error": "Failed to stop load test", "message": err.Error()})
+			return
+		}
 	}
 
 	c.JSON(200, gin.H{"message": "Load test stopped", "data": result})
