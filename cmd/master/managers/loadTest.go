@@ -2,6 +2,7 @@ package managers
 
 import (
 	"errors"
+	"strconv"
 	"sync"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/pkg/structs"
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
+	"github.com/zishang520/socket.io/v2/socket"
 )
 
 type LoadTestMetricsManager struct {
@@ -165,6 +167,17 @@ func CompleteLoadTestByTestModel(loadTestsTest structs.LoadTestTestsModel) (stru
 		return structs.LoadTestTestsModel{}, updateResult.Error
 	}
 
+	go func () {
+		testId := loadTestsTest.ID
+		if _, exists := MetricsManager.Metrics[testId]; !exists {
+			log.Errorf("Load test with ID %d not found in metrics ", testId)
+			MetricsManager.Metrics[testId] = &map[int64][]structs.ResponseFragment{}
+		}
+		metricsMap := *MetricsManager.Metrics[testId]
+
+		reportToSockets(loadTestsTest, metricsMap, -1)
+	}()
+
 	return loadTestsTest, nil
 }
 
@@ -230,6 +243,9 @@ func AggregateMetrics(testId uint, responseFragments []structs.ResponseFragment,
 			log.Errorf("Error updating load test metrics: %s", err)
 			return
 		} else {
+
+			go reportToSockets(testsTest, metricsMap, elapsedSeconds)
+
 			log.Infof("Metrics updated successfully for ID %d at %d seconds for timestamp %d", testId, elapsedSeconds, reportedAt)
 		}
 
@@ -237,4 +253,22 @@ func AggregateMetrics(testId uint, responseFragments []structs.ResponseFragment,
 		log.Error("No requests were made, skipping metrics update.")
 	}
 
+}
+
+func reportToSockets(testsTest structs.LoadTestTestsModel, metricsMap map[int64][]structs.ResponseFragment, elapsedSeconds int64) {
+	roomName := socket.Room("loadTest:" + strconv.FormatUint(uint64(testsTest.LoadTestModelId), 10))
+
+	type TestMetricsReport struct {
+		Test           structs.LoadTestTestsModel           `json:"test"`
+		TestMetrics    map[int64][]structs.ResponseFragment `json:"testMetrics"`
+		ElapsedSeconds int64                                `json:"elapsedSeconds"`
+	}
+
+	report := TestMetricsReport{
+		Test:           testsTest,
+		TestMetrics:    metricsMap,
+		ElapsedSeconds: elapsedSeconds, // Kind of irrelivent, but nice to have
+	}
+
+	initializers.SocketIO.To(roomName).Emit("testDetails", report)
 }

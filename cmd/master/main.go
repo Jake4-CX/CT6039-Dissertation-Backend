@@ -1,15 +1,16 @@
 package main
 
 import (
+	"net/http"
 	"os"
 	"time"
+
+	"github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/cmd/master/handlers"
 	"github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/cmd/master/http/controllers"
 	"github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/cmd/master/initializers"
-	"github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/cmd/master/handlers"
 	pkgInitalizer "github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/pkg/initializers"
 	"github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/pkg/structs"
 	"github.com/gin-gonic/gin"
-	"github.com/gin-contrib/cors"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 )
@@ -22,6 +23,11 @@ func main() {
 	initializers.InitializeDB()
 	pkgInitalizer.InitializeRabbitMQ()
 	defer pkgInitalizer.CleanupRabbitMQ()
+	defer initializers.SocketIO.Close(func (err error) {
+		log.Error(err)
+	})
+
+	initializers.InitializeWebsocket() // Socket.IO server
 
 	workers = make(map[string]*structs.Worker)
 
@@ -36,20 +42,10 @@ func main() {
 
 	router := gin.Default()
 
-	router.Use(cors.New(
-		cors.Config{
-			AllowOrigins:     []string{"*"},
-			AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-			AllowHeaders:     []string{"Origin", "Content-Length", "Content-Type", "Authorization"},
-			ExposeHeaders:    []string{"Content-Length"},
-			AllowCredentials: true,
-			MaxAge: 				 12 * time.Hour,
-		},
-	))
+	router.Use(GinMiddleware(("*")))
 
 	// Workers
 	router.GET("/load-workers", controllers.GetWorkers)
-
 
 	// Load tests
 	// Get load tests
@@ -67,9 +63,31 @@ func main() {
 	// Delete load test
 	router.DELETE("/load-tests/:id", controllers.DeleteLoadTest)
 
+	// Socket.IO
+	router.GET("/socket.io/*any", gin.WrapH(initializers.SocketIO.ServeHandler(nil)))
+	router.POST("/socket.io/*any", gin.WrapH(initializers.SocketIO.ServeHandler(nil)))
+
 	log.Fatal(router.Run("0.0.0.0:" + os.Getenv("REST_PORT")))
 
 	log.Info("Master node started. Waiting for workers...")
+}
+
+func GinMiddleware(allowOrigin string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", allowOrigin)
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "POST, OPTIONS, GET, PUT, DELETE")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Accept, Authorization, Content-Type, Content-Length, X-CSRF-Token, Token, session, Origin, Host, Connection, Accept-Encoding, Accept-Language, X-Requested-With")
+
+		if c.Request.Method == http.MethodOptions {
+			c.AbortWithStatus(http.StatusNoContent)
+			return
+		}
+
+		c.Request.Header.Del("Origin")
+
+		c.Next()
+	}
 }
 
 func monitorWorkers() {
