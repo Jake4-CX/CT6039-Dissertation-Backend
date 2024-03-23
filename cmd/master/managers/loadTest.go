@@ -121,6 +121,11 @@ func StartLoadTest(loadTest structs.LoadTestModel, duration int, virtualUsers in
 		return err
 	}
 
+	if (len(GetAvailableWorkers()) == 0) {
+		log.Errorf("No workers available to start load test with ID %d", newTest.ID)
+		return structs.LoadTestTestsModel{}, errors.New("no workers available")
+	}
+
 	initializers.InitalizeTest(&newTest, loadTest.TestPlan, GetAvailableWorkers(), completionCallback)
 	return newTest, nil
 }

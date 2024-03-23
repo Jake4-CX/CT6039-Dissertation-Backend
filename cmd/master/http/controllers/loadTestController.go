@@ -156,7 +156,7 @@ func StartLoadTest(c *gin.Context) {
 	result, err := managers.StartLoadTest(loadTest, newLoadTestExecution.Duration, newLoadTestExecution.VirtualUsers, newLoadTestExecution.LoadTestType)
 
 	if err != nil {
-		c.JSON(500, gin.H{"error": "Failed to start load test"})
+		c.JSON(500, gin.H{"error": "Failed to start load test", "message": err.Error()})
 		return
 	}
 
