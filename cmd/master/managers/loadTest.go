@@ -86,6 +86,11 @@ func GetRunningLoadTestsByLoadTest(loadTest structs.LoadTestModel) []structs.Loa
 func StartLoadTest(loadTest structs.LoadTestModel, duration int, virtualUsers int, loadTestType structs.LoadTestType) (structs.LoadTestTestsModel, error) {
 	log.Infof("Starting load test with ID %s", loadTest.UUID)
 
+	if (len(GetAvailableWorkers()) == 0) {
+		log.Errorf("No workers available to start load test")
+		return structs.LoadTestTestsModel{}, errors.New("no workers available")
+	}
+
 	testMetrics := structs.LoadTestMetricsModel{
 		TotalRequests:       0,
 		SuccessfulRequests:  0,
@@ -119,11 +124,6 @@ func StartLoadTest(loadTest structs.LoadTestModel, duration int, virtualUsers in
 	completionCallback := func(testModel structs.LoadTestTestsModel) error {
 		_, err := CompleteLoadTestByTestModel(testModel)
 		return err
-	}
-
-	if (len(GetAvailableWorkers()) == 0) {
-		log.Errorf("No workers available to start load test with ID %d", newTest.ID)
-		return structs.LoadTestTestsModel{}, errors.New("no workers available")
 	}
 
 	initializers.InitalizeTest(&newTest, loadTest.TestPlan, GetAvailableWorkers(), completionCallback)
