@@ -29,6 +29,8 @@ func InitalizeTest(loadTest *structs.LoadTestTestsModel, testPlan structs.LoadTe
 			remainingUsers--
 		}
 
+		loadTest.VirtualUsers = virtualUsersForThisWorker
+
 		sendStartTaskToWorker(*loadTest, testPlan, worker.ID)
 	}
 
