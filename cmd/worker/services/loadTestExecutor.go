@@ -145,6 +145,28 @@ func executeTreeNode(ctx context.Context, node structs.TreeNode, client *http.Cl
 
 		*lastRequestInfo = makeRequest(ctx, client, postRequestNode.URL, "POST", []byte(postRequestNode.Body), responseChannel)
 
+	case structs.PutRequest:
+		putRequestNode, ok := node.Data.(*structs.PutRequestNodeData)
+		if !ok {
+			log.Errorf("Failed to cast node data to PutRequestNodeData")
+			break
+		}
+
+		log.Infof("Making PUT request to %s with body: %s", putRequestNode.URL, putRequestNode.Body)
+
+		*lastRequestInfo = makeRequest(ctx, client, putRequestNode.URL, "PUT", []byte(putRequestNode.Body), responseChannel)
+
+	case structs.DeleteRequest:
+		deleteRequestNode, ok := node.Data.(*structs.DeleteRequestNodeData)
+		if !ok {
+			log.Errorf("Failed to cast node data to DeleteRequestNodeData")
+			break
+		}
+
+		log.Infof("Making DELETE request to %s", deleteRequestNode.URL)
+
+		*lastRequestInfo = makeRequest(ctx, client, deleteRequestNode.URL, "DELETE", nil, responseChannel)
+
 	case structs.IfCondition:
 		ifConditionNode, ok := node.Data.(*structs.IfConditionNodeData)
 		if !ok {

@@ -9,12 +9,14 @@ type NodeType string
 type DelayType string
 
 const (
-	GetRequest  NodeType = "getRequest"
-	PostRequest NodeType = "postRequest"
-	IfCondition NodeType = "ifCondition"
-	DelayNode   NodeType = "delayNode"
-	StartNode   NodeType = "startNode"
-	StopNode    NodeType = "stopNode"
+	GetRequest    NodeType = "getRequest"
+	PostRequest   NodeType = "postRequest"
+	PutRequest    NodeType = "putRequest"
+	DeleteRequest NodeType = "deleteRequest"
+	IfCondition   NodeType = "ifCondition"
+	DelayNode     NodeType = "delayNode"
+	StartNode     NodeType = "startNode"
+	StopNode      NodeType = "stopNode"
 )
 
 const (
@@ -50,6 +52,17 @@ type PostRequestNodeData struct {
 	Body  string `json:"body" binding:"required"`
 }
 
+type PutRequestNodeData struct {
+	Label string `json:"label" binding:"required"`
+	URL   string `json:"url" binding:"required"`
+	Body  string `json:"body" binding:"required"`
+}
+
+type DeleteRequestNodeData struct {
+	Label string `json:"label" binding:"required"`
+	URL   string `json:"url" binding:"required"`
+}
+
 type IfConditionNodeData struct {
 	Label     string `json:"label" binding:"required"`
 	Field     string `json:"field" binding:"required"`
@@ -75,12 +88,14 @@ type StopNodeData struct {
 	Label string `json:"label" binding:"required"`
 }
 
-func (*GetRequestNodeData) IsNodeData()  {}
-func (*PostRequestNodeData) IsNodeData() {}
-func (*IfConditionNodeData) IsNodeData() {}
-func (*DelayNodeData) IsNodeData()       {}
-func (*StartNodeData) IsNodeData()       {}
-func (*StopNodeData) IsNodeData()        {}
+func (*GetRequestNodeData) IsNodeData()    {}
+func (*PostRequestNodeData) IsNodeData()   {}
+func (*PutRequestNodeData) IsNodeData()    {}
+func (*DeleteRequestNodeData) IsNodeData() {}
+func (*IfConditionNodeData) IsNodeData()   {}
+func (*DelayNodeData) IsNodeData()         {}
+func (*StartNodeData) IsNodeData()         {}
+func (*StopNodeData) IsNodeData()          {}
 
 func (t *TreeNode) UnmarshalJSON(data []byte) error {
 	var raw struct {
@@ -100,6 +115,10 @@ func (t *TreeNode) UnmarshalJSON(data []byte) error {
 		nodeData = &GetRequestNodeData{}
 	case "postRequest":
 		nodeData = &PostRequestNodeData{}
+	case "putRequest":
+		nodeData = &PutRequestNodeData{}
+	case "deleteRequest":
+		nodeData = &DeleteRequestNodeData{}
 	case "ifCondition":
 		nodeData = &IfConditionNodeData{}
 	case "delayNode":
