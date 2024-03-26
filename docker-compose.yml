@@ -18,7 +18,7 @@ services:
       - "5672:5672" # RabbitMQ server
     volumes:
       - ./.env:/app/.env
-      - loadtest-db:/app/load_testing.db
+      - loadtest-db:/app/db/load_testing.db
     healthcheck:
       test: rabbitmq-diagnostics -q status && rabbitmq-diagnostics -q check_local_alarms
       interval: 10s
