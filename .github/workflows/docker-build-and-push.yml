@@ -8,30 +8,30 @@ on:
     tags:
       - 'v*'
 env:
-  DOCKER_USERNAME: Jake4
+  DOCKER_USERNAME: jake4
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     steps:
       - name: Check Out Repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
 
       - name: Extract version from Git tag
         if: startsWith(github.ref, 'refs/tags/')
         run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@v1
+        uses: docker/login-action@v2
         with:
           username: ${{ env.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_TOKEN }}
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v2
 
       - name: Build and Push Docker Image for loadtest-master
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v4
         with:
           context: .
           file: ./deployments/master.dockerfile
@@ -41,7 +41,7 @@ jobs:
             ${{ env.DOCKER_USERNAME }}/loadtest-master:${{ env.VERSION }}
 
       - name: Build and Push Docker Image for loadtest-worker
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v4
         with:
           context: .
           file: ./deployments/worker.dockerfile
