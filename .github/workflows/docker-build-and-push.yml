@@ -1,0 +1,51 @@
+name: Build and Push Docker images
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*'
+env:
+  DOCKER_USERNAME: Jake4
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Out Repository
+        uses: actions/checkout@v2
+
+      - name: Extract version from Git tag
+        if: startsWith(github.ref, 'refs/tags/')
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v1
+        with:
+          username: ${{ env.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+
+      - name: Build and Push Docker Image for loadtest-master
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./deployments/master.dockerfile
+          push: true
+          tags: |
+            ${{ env.DOCKER_USERNAME }}/loadtest-master:latest
+            ${{ env.DOCKER_USERNAME }}/loadtest-master:${{ env.VERSION }}
+
+      - name: Build and Push Docker Image for loadtest-worker
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: ./deployments/worker.dockerfile
+          push: true
+          tags: |
+            ${{ env.DOCKER_USERNAME }}/loadtest-worker:latest
+            ${{ env.DOCKER_USERNAME }}/loadtest-worker:${{ env.VERSION }}

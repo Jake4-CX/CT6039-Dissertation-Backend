@@ -5,7 +5,7 @@ services:
     build:
       context: .
       dockerfile: deployments/master.dockerfile
-    image: loadtest-master
+    image: jake4/loadtest-master:latest
     environment:
       REST_PORT: 8080
       RABBIT_HOST: "loadtest-master"
@@ -35,7 +35,7 @@ services:
     build:
       context: .
       dockerfile: deployments/worker.dockerfile
-    image: loadtest-worker
+    image: jake4/loadtest-worker:latest
     environment:
       REST_PORT: 8080
       RABBIT_HOST: "loadtest-master"
