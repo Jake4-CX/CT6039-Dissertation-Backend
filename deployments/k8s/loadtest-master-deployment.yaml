@@ -1,0 +1,44 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: loadtest-master
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: loadtest-master
+  template:
+    metadata:
+      labels:
+        app: loadtest-master
+    spec:
+      containers:
+      - name: loadtest-master
+        image: jake4/loadtest-master:latest
+        ports:
+        - containerPort: 8080
+        - containerPort: 15672
+        - containerPort: 5672
+        envFrom:
+        - configMapRef:
+            name: loadtest-env-file
+        volumeMounts:
+        - name: loadtest-db
+          mountPath: /app/db
+        - name: env-file
+          mountPath: /app/.env
+          subPath: .env
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "1Gi"
+            cpu: "300m"
+      volumes:
+      - name: loadtest-db
+        persistentVolumeClaim:
+          claimName: loadtest-db-pvc
+      - name: env-file
+        configMap:
+          name: loadtest-env-file

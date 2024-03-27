@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loadtest-env-file
+data:
+  .env: |
+    REST_PORT=8080
+    RABBIT_HOST=loadtest-master
+    RABBIT_PORT=5672
+    RABBIT_USER=guest
+    RABBIT_PASS=guest

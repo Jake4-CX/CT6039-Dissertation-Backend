@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: loadtest-master
+spec:
+  type: LoadBalancer
+  selector:
+    app: loadtest-master
+  ports:
+    - name: rest-api
+      port: 8080
+      targetPort: 8080
+    - name: rabbitmq-management
+      port: 15672
+      targetPort: 15672
+    - name: rabbitmq-server
+      port: 5672
+      targetPort: 5672
