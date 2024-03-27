@@ -10,6 +10,7 @@ import (
 	"github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/cmd/master/initializers"
 	pkgInitalizer "github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/pkg/initializers"
 	"github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/pkg/structs"
+	"github.com/gin-gonic/autotls"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
@@ -23,7 +24,7 @@ func main() {
 	initializers.InitializeDB()
 	pkgInitalizer.InitializeRabbitMQ()
 	defer pkgInitalizer.CleanupRabbitMQ()
-	defer initializers.SocketIO.Close(func (err error) {
+	defer initializers.SocketIO.Close(func(err error) {
 		log.Error(err)
 	})
 
@@ -67,7 +68,11 @@ func main() {
 	router.GET("/socket.io/*any", gin.WrapH(initializers.SocketIO.ServeHandler(nil)))
 	router.POST("/socket.io/*any", gin.WrapH(initializers.SocketIO.ServeHandler(nil)))
 
-	log.Fatal(router.Run("0.0.0.0:" + os.Getenv("REST_PORT")))
+	if os.Getenv("USE_TLS") == "" || os.Getenv("USE_TLS") != "true" {
+		log.Fatal(router.Run("0.0.0.0:" + os.Getenv("REST_PORT")))
+	} else {
+		log.Fatal(autotls.Run(router, "api.load-test.jack.lat"))
+	}
 
 	log.Info("Master node started. Waiting for workers...")
 }
