@@ -26,4 +26,4 @@ jobs:
         run: doctl kubernetes cluster kubeconfig save --expiry-seconds 600 ${{ env.DO_K8S_CLUSTER_NAME }}
 
       - name: Deploy to Digital Ocean Kubernetes
-        run: doctl kubectl apply -f ./deployments/k8s
+        run: kubectl apply -f ./deployments/k8s
