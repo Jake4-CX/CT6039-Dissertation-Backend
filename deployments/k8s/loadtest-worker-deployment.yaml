@@ -13,23 +13,24 @@ spec:
         app: loadtest-worker
     spec:
       containers:
-      - name: loadtest-worker
-        image: jake4/loadtest-worker:latest
-        envFrom:
-        - configMapRef:
-            name: loadtest-env-file
-        volumeMounts:
-        - name: env-file
-          mountPath: /app/.env
-          subPath: .env
-        resources:
-          requests:
-            memory: "128Mi"
-            cpu: "100m"
-          limits:
-            memory: "384Mi"
-            cpu: "200m"
+        - name: loadtest-worker
+          image: jake4/loadtest-worker:latest
+          imagePullPolicy: Always
+          envFrom:
+            - configMapRef:
+                name: loadtest-env-file
+          volumeMounts:
+            - name: env-file
+              mountPath: /app/.env
+              subPath: .env
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "384Mi"
+              cpu: "200m"
       volumes:
-      - name: env-file
-        configMap:
-          name: loadtest-env-file
+        - name: env-file
+          configMap:
+            name: loadtest-env-file

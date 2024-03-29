@@ -13,32 +13,34 @@ spec:
         app: loadtest-master
     spec:
       containers:
-      - name: loadtest-master
-        image: jake4/loadtest-master:latest
-        ports:
-        - containerPort: 8080
-        - containerPort: 15672
-        - containerPort: 5672
-        envFrom:
-        - configMapRef:
-            name: loadtest-env-file
-        volumeMounts:
-        - name: loadtest-db
-          mountPath: /app/db
-        - name: env-file
-          mountPath: /app/.env
-          subPath: .env
-        resources:
-          requests:
-            memory: "256Mi"
-            cpu: "100m"
-          limits:
-            memory: "1Gi"
-            cpu: "300m"
+        - name: loadtest-master
+          image: jake4/loadtest-master:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 443
+            - containerPort: 8080
+            - containerPort: 15672
+            - containerPort: 5672
+          envFrom:
+            - configMapRef:
+                name: loadtest-env-file
+          volumeMounts:
+            - name: loadtest-db
+              mountPath: /app/db
+            - name: env-file
+              mountPath: /app/.env
+              subPath: .env
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "1Gi"
+              cpu: "300m"
       volumes:
-      - name: loadtest-db
-        persistentVolumeClaim:
-          claimName: loadtest-db-pvc
-      - name: env-file
-        configMap:
-          name: loadtest-env-file
+        - name: loadtest-db
+          persistentVolumeClaim:
+            claimName: loadtest-db-pvc
+        - name: env-file
+          configMap:
+            name: loadtest-env-file

@@ -1,0 +1,29 @@
+name: Deploy to Digital Ocean Kubernetes
+
+on:
+  workflow_run:
+    workflows: ["Build and Push Docker images"]
+    types:
+      - completed
+    branches:
+      - master
+env:
+  DO_K8S_CLUSTER_NAME: "loadtesting-lon-01"
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      - name: Install doctl
+        uses: digitalocean/action-doctl@v2
+        with:
+          token: ${{ secrets.DO_TOKEN }}
+      
+      - name: Save digitalocean kubeconfig
+        run: doctl kubernetes cluster kubeconfig save --expiry-seconds 600 ${{ env.DO_K8S_CLUSTER_NAME }}
+
+      - name: Deploy to Digital Ocean Kubernetes
+        run: doctl kubectl apply -f ./deployments/k8s

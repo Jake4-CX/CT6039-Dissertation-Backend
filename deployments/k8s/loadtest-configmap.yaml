@@ -4,6 +4,7 @@ metadata:
   name: loadtest-env-file
 data:
   .env: |
+    USE_TLS=true
     REST_PORT=8080
     RABBIT_HOST=loadtest-master
     RABBIT_PORT=5672

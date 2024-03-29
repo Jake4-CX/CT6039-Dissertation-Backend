@@ -2,6 +2,9 @@
 
 This document outlines the steps to deploy the Load Testing application to a Kubernetes cluster using Minikube. It includes instructions for deploying the application components, as well as accessing the REST API exposed by the `loadtest-master` service.
 
+> [!NOTE]
+> TLS is enabled by default, requring the application to run on port 443 and is only accessible on the defined domain.
+
 ## Prerequisites
 
 - [kubectl](https://kubernetes.io/docs/tasks/tools/) installed and configured to communicate with your Kubernetes cluster.
