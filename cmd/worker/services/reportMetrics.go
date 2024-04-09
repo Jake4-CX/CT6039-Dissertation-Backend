@@ -53,7 +53,7 @@ func ReportMetricsPeriodically(ctx context.Context, workerID string, responseCha
 				amqp.Publishing{ContentType: "application/json", Body: metricsJSON},
 			)
 
-			log.Infof("Reported metrics: %+v", metrics)
+			log.Debugf("Reported metrics: %+v", metrics)
 
 			if time.Since(time.Now()).Milliseconds() > int64(duration) {
 				log.Info("Duration elapsed")

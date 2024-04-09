@@ -28,7 +28,7 @@ func ExecuteLoadTest(assignment structs.TaskAssignment) {
 	}
 
 	var wg sync.WaitGroup
-	responseChannel := make(chan structs.ResponseItem, 100)
+	responseChannel := make(chan structs.ResponseItem, assignment.LoadTestTestsModel.VirtualUsers + 10)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(assignment.LoadTestTestsModel.Duration)*time.Millisecond)
 	defer cancel()
@@ -84,7 +84,7 @@ func executeConstantLoad(ctx context.Context, assignment structs.TaskAssignment,
 					return
 				default:
 					// Make request
-					simulateVirtualUser(ctx, testPlan, id, responseChannel)
+					simulateVirtualUser(ctx, testPlan, responseChannel)
 				}
 			}
 		}(i)
@@ -114,7 +114,7 @@ func executeGradualIncreaseLoad(ctx context.Context, assignment structs.TaskAssi
 					// Determine if user is in the allowed chunk
 					if id < (currentChunk+1)*chunkSize {
 						// Simulate the virtual user
-						simulateVirtualUser(ctx, testPlan, id, responseChannel)
+						simulateVirtualUser(ctx, testPlan, responseChannel)
 					} else {
 						// log.Info("User not allowed to make request in this chunk - ", id)
 						time.Sleep(500 * time.Millisecond) // If this is removed, the CPU usage will be very high. This could also wait for longer, but it may reduce the accuracy of the test
@@ -148,18 +148,18 @@ func executeSpikeLoad(ctx context.Context, assignment structs.TaskAssignment, te
 					return
 				default:
 					// Make request
-					simulateVirtualUser(ctx, testPlan, id, responseChannel)
+					simulateVirtualUser(ctx, testPlan, responseChannel)
 				}
 			}
 		}(i)
 	}
 }
 
-func simulateVirtualUser(ctx context.Context, testPlan []structs.TreeNode, id int, responseChannel chan<- structs.ResponseItem) {
+func simulateVirtualUser(ctx context.Context, testPlan []structs.TreeNode, responseChannel chan<- structs.ResponseItem) {
+
 	client := &http.Client{
 		Timeout: 3 * time.Second,
 	}
-
 	// Execute the test plan nodes
 	for _, node := range testPlan {
 		select {
@@ -168,7 +168,6 @@ func simulateVirtualUser(ctx context.Context, testPlan []structs.TreeNode, id in
 			return
 		default:
 			executeTreeNode(ctx, node, client, &LastRequestInfo{}, responseChannel)
-			log.Infof("Finished executing test plan node (VirtualUser ID: %d)", id)
 		}
 	}
 }
@@ -186,7 +185,11 @@ func makeRequest(ctx context.Context, client *http.Client, url string, method st
 	if err != nil {
 		log.Errorf("Failed to create request: %s", err)
 		responseChannel <- structs.ResponseItem{StatusCode: 0, ResponseTime: 0}
-		return LastRequestInfo{}
+		return LastRequestInfo{
+			ResponseCode: 0,
+			ResponseTime: 0,
+			ResponseSize: 0,
+		}
 	}
 
 	start := time.Now()
@@ -194,9 +197,13 @@ func makeRequest(ctx context.Context, client *http.Client, url string, method st
 	elapsed := time.Since(start).Milliseconds()
 
 	if err != nil {
-		log.Errorf("Failed to execute request: %s", err)
+		// log.Infof("(Virtual User: %d) Failed to execute request: %s", id, err)
 		responseChannel <- structs.ResponseItem{StatusCode: 0, ResponseTime: elapsed}
-		return LastRequestInfo{}
+		return LastRequestInfo{
+			ResponseCode: 0,
+			ResponseTime: elapsed,
+			ResponseSize: 0,
+		}
 	}
 	defer resp.Body.Close()
 
@@ -224,7 +231,7 @@ func executeTreeNode(ctx context.Context, node structs.TreeNode, client *http.Cl
 			log.Errorf("Failed to cast node data to GetRequestNodeData")
 			break
 		}
-		log.Infof("Making GET request to %s", getRequestNode.URL)
+		log.Debugf("Making GET request to %s", getRequestNode.URL)
 
 		*lastRequestInfo = makeRequest(ctx, client, getRequestNode.URL, "GET", nil, responseChannel)
 
@@ -234,7 +241,7 @@ func executeTreeNode(ctx context.Context, node structs.TreeNode, client *http.Cl
 			log.Errorf("Failed to cast node data to PostRequestNodeData")
 			break
 		}
-		log.Infof("Making POST request to %s with body: %s", postRequestNode.URL, postRequestNode.Body)
+		log.Debugf("Making POST request to %s with body: %s", postRequestNode.URL, postRequestNode.Body)
 
 		*lastRequestInfo = makeRequest(ctx, client, postRequestNode.URL, "POST", []byte(postRequestNode.Body), responseChannel)
 
@@ -245,7 +252,7 @@ func executeTreeNode(ctx context.Context, node structs.TreeNode, client *http.Cl
 			break
 		}
 
-		log.Infof("Making PUT request to %s with body: %s", putRequestNode.URL, putRequestNode.Body)
+		log.Debugf("Making PUT request to %s with body: %s", putRequestNode.URL, putRequestNode.Body)
 
 		*lastRequestInfo = makeRequest(ctx, client, putRequestNode.URL, "PUT", []byte(putRequestNode.Body), responseChannel)
 
@@ -256,7 +263,7 @@ func executeTreeNode(ctx context.Context, node structs.TreeNode, client *http.Cl
 			break
 		}
 
-		log.Infof("Making DELETE request to %s", deleteRequestNode.URL)
+		log.Debugf("Making DELETE request to %s", deleteRequestNode.URL)
 
 		*lastRequestInfo = makeRequest(ctx, client, deleteRequestNode.URL, "DELETE", nil, responseChannel)
 
@@ -266,8 +273,8 @@ func executeTreeNode(ctx context.Context, node structs.TreeNode, client *http.Cl
 			log.Errorf("Failed to cast node data to IfConditionNodeData")
 			break
 		}
-		log.Infof("Evaluating if condition at node %s", ifConditionNode.Label)
-		log.Infof("Field: %s, Condition: %s, Value: %s", ifConditionNode.Field, ifConditionNode.Condition, ifConditionNode.Value)
+		log.Debugf("Evaluating if condition at node %s", ifConditionNode.Label)
+		log.Debugf("Field: %s, Condition: %s, Value: %s", ifConditionNode.Field, ifConditionNode.Condition, ifConditionNode.Value)
 
 		if evaluateField(ifConditionNode, lastRequestInfo) {
 			for _, children := range node.Conditions.TrueChildren {
@@ -281,17 +288,17 @@ func executeTreeNode(ctx context.Context, node structs.TreeNode, client *http.Cl
 	case structs.DelayNode:
 		delayNode, ok := node.Data.(*structs.DelayNodeData)
 		if !ok {
-			log.Errorf("Failed to cast node data to DelayNodeData")
+			log.Debugf("Failed to cast node data to DelayNodeData")
 			break
 		}
 
 		switch delayNode.DelayType {
 		case structs.Fixed:
-			log.Infof("Delaying for %d milliseconds", delayNode.FixedDelay)
+			log.Debugf("Delaying for %d milliseconds", delayNode.FixedDelay)
 			time.Sleep(time.Duration(delayNode.FixedDelay) * time.Millisecond)
 		case structs.Random:
 			randomDelay := time.Duration(rand.Intn(delayNode.RandomDelay.Max-delayNode.RandomDelay.Min) + delayNode.RandomDelay.Min)
-			log.Infof("Delaying for %d milliseconds", randomDelay)
+			log.Debugf("Delaying for %d milliseconds", randomDelay)
 			time.Sleep(randomDelay * time.Millisecond)
 		default:
 			log.Errorf("Unknown delay type: %s", delayNode.DelayType)
@@ -303,7 +310,7 @@ func executeTreeNode(ctx context.Context, node structs.TreeNode, client *http.Cl
 			log.Errorf("Failed to cast node data to StartNodeData")
 			break
 		}
-		log.Infof("Starting load test at node %s", startNode.Label)
+		log.Debugf("Starting load test at node %s", startNode.Label)
 
 	case structs.StopNode:
 		stopNode, ok := node.Data.(*structs.StopNodeData)
@@ -312,7 +319,7 @@ func executeTreeNode(ctx context.Context, node structs.TreeNode, client *http.Cl
 			break
 		}
 
-		log.Infof("Stopping load test at node %s", stopNode.Label)
+		log.Debugf("Stopping load test at node %s", stopNode.Label)
 		return
 	}
 
