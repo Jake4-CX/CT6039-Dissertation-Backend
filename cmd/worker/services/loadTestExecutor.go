@@ -27,10 +27,6 @@ func ExecuteLoadTest(assignment structs.TaskAssignment) {
 		return
 	}
 
-	client := &http.Client{
-		Timeout: 10 * time.Second,
-	}
-
 	var wg sync.WaitGroup
 	responseChannel := make(chan structs.ResponseItem, 100)
 
@@ -44,32 +40,21 @@ func ExecuteLoadTest(assignment structs.TaskAssignment) {
 
 	testStartTime := time.Now()
 
-	for i := 0; i < assignment.LoadTestTestsModel.VirtualUsers; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for {
-				select {
-				case <-ctx.Done():
-					// Test duration is over.
-					return
-				default:
-					// Make request
+	switch assignment.LoadTestTestsModel.LoadTestType {
+	case structs.Load, structs.Soak:
+		log.Info("Executing constant load test")
+		executeConstantLoad(ctx, assignment, &wg, responseChannel)
 
-					var testPlan []structs.TreeNode
-					if err := json.Unmarshal([]byte(assignment.LoadTestPlanModel.TestPlan), &testPlan); err != nil {
-						log.Errorf("Failed to parse test plan: %v", err)
-						return
-					}
+	case structs.Stress:
+		log.Info("Executing stress test")
+		executeGradualIncreaseLoad(ctx, assignment, &wg, responseChannel)
 
-					// Execute the test plan nodes
-					for _, node := range testPlan {
-						executeTreeNode(ctx, node, client, &LastRequestInfo{}, responseChannel)
-						log.Infof("Finished executing test plan node (VirtualUser ID: %d)", i)
-					}
-				}
-			}
-		}()
+	case structs.Spike:
+		log.Info("Executing spike test")
+		executeSpikeLoad(ctx, assignment, &wg, responseChannel)
+
+	default:
+		log.Errorf("Unknown load test type: %s", assignment.LoadTestTestsModel.LoadTestType)
 	}
 
 	wg.Wait()
@@ -78,6 +63,113 @@ func ExecuteLoadTest(assignment structs.TaskAssignment) {
 	testDuration := time.Since(testStartTime)
 
 	log.Infof("Load test completed in %s.", testDuration)
+}
+
+// Put Load Test Type Executor functions here
+func executeConstantLoad(ctx context.Context, assignment structs.TaskAssignment, wg *sync.WaitGroup, responseChannel chan<- structs.ResponseItem) {
+	for i := 0; i < assignment.LoadTestTestsModel.VirtualUsers; i++ {
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					// Test duration is over.
+					return
+				default:
+					// Make request
+					simulateVirtualUser(ctx, assignment, id, responseChannel)
+				}
+			}
+		}(i)
+	}
+}
+
+func executeGradualIncreaseLoad(ctx context.Context, assignment structs.TaskAssignment, wg *sync.WaitGroup, responseChannel chan<- structs.ResponseItem) {
+	totalUsers := assignment.LoadTestTestsModel.VirtualUsers
+	chunkSize := totalUsers / 10                                                                        // Assuming you want 10 chunks
+	delayBetweenChunks := time.Duration(assignment.LoadTestTestsModel.Duration) * time.Millisecond / 10 // 10% of the total duration
+
+	// Initialize a counter to keep track of the current chunk
+	currentChunk := 0
+
+	for i := 0; i < totalUsers; i++ {
+		wg.Add(1)
+
+		go func(id int) {
+			defer wg.Done()
+
+			for {
+				select {
+				case <-ctx.Done():
+					// Test duration is over.
+					return
+				default:
+					// Determine if user is in the allowed chunk
+					if id < (currentChunk+1)*chunkSize {
+						// Simulate the virtual user
+						simulateVirtualUser(ctx, assignment, id, responseChannel)
+					} else {
+						// log.Info("User not allowed to make request in this chunk - ", id)
+						time.Sleep(500 * time.Millisecond) // If this is removed, the CPU usage will be very high. This could also wait for longer, but it may reduce the accuracy of the test
+					}
+
+					// Check if the current chunk has been fully processed
+					if id == (currentChunk+1)*chunkSize-1 {
+						log.Infof("Chunk %d/%d completed", currentChunk+1, 10)
+						// Wait for the delay before allowing the next chunk
+						time.Sleep(delayBetweenChunks)
+						// Move to the next chunk
+						currentChunk++
+					}
+				}
+			}
+		}(i)
+	}
+}
+
+func executeSpikeLoad(ctx context.Context, assignment structs.TaskAssignment, wg *sync.WaitGroup, responseChannel chan<- structs.ResponseItem) {
+	for i := 0; i < assignment.LoadTestTestsModel.VirtualUsers; i++ {
+		time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond) // Random short delay before each spike
+		wg.Add(1)
+		go func(id int) {
+			defer wg.Done()
+			for {
+				select {
+				case <-ctx.Done():
+					// Test duration is over.
+					return
+				default:
+					// Make request
+					simulateVirtualUser(ctx, assignment, id, responseChannel)
+				}
+			}
+		}(i)
+	}
+}
+
+func simulateVirtualUser(ctx context.Context, assignment structs.TaskAssignment, id int, responseChannel chan<- structs.ResponseItem) {
+	client := &http.Client{
+		Timeout: 3 * time.Second,
+	}
+
+	var testPlan []structs.TreeNode
+	if err := json.Unmarshal([]byte(assignment.LoadTestPlanModel.TestPlan), &testPlan); err != nil {
+		log.Errorf("Failed to parse test plan: %v", err)
+		return
+	}
+
+	// Execute the test plan nodes
+	for _, node := range testPlan {
+		select {
+		case <-ctx.Done():
+			// Test duration is over.
+			return
+		default:
+			executeTreeNode(ctx, node, client, &LastRequestInfo{}, responseChannel)
+			log.Infof("Finished executing test plan node (VirtualUser ID: %d)", id)
+		}
+	}
 }
 
 func makeRequest(ctx context.Context, client *http.Client, url string, method string, requestBody []byte, responseChannel chan<- structs.ResponseItem) (lastRequestInfo LastRequestInfo) {
