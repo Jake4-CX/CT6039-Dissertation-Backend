@@ -28,7 +28,7 @@ func ExecuteLoadTest(assignment structs.TaskAssignment) {
 	}
 
 	var wg sync.WaitGroup
-	responseChannel := make(chan structs.ResponseItem, assignment.LoadTestTestsModel.VirtualUsers + 10)
+	responseChannel := make(chan structs.ResponseItem, assignment.LoadTestTestsModel.VirtualUsers+10)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(assignment.LoadTestTestsModel.Duration)*time.Millisecond)
 	defer cancel()
@@ -135,22 +135,51 @@ func executeGradualIncreaseLoad(ctx context.Context, assignment structs.TaskAssi
 }
 
 func executeSpikeLoad(ctx context.Context, assignment structs.TaskAssignment, testPlan []structs.TreeNode, wg *sync.WaitGroup, responseChannel chan<- structs.ResponseItem) {
+	totalUsers := assignment.LoadTestTestsModel.VirtualUsers
+	peakUsers := totalUsers          // 100% of total users
+	lowUsers := totalUsers / 5       // 20% of total users
+	cycleDuration := time.Second * 4 // 4 seconds per cycle
 
-	for i := 0; i < assignment.LoadTestTestsModel.VirtualUsers; i++ {
-		time.Sleep(time.Duration(rand.Intn(1000)) * time.Millisecond) // Random short delay before each spike
+	// Initialize a counter to keep track of the current cycle
+	currentCycle := 0
+
+	for i := 0; i < totalUsers; i++ {
 		wg.Add(1)
+
 		go func(id int) {
+
 			defer wg.Done()
+
 			for {
 				select {
 				case <-ctx.Done():
 					// Test duration is over.
 					return
 				default:
-					// Make request
-					simulateVirtualUser(ctx, testPlan, responseChannel)
+					var usersForCycle int
+					if !(currentCycle%2 == 0) {
+						// Low users
+						usersForCycle = lowUsers
+						if id < lowUsers {
+							// Simulate the virtual user
+							simulateVirtualUser(ctx, testPlan, responseChannel)
+						} else {
+							time.Sleep(500 * time.Millisecond) // If this is removed, the CPU usage will be very high. This could also wait for longer, but it may reduce the accuracy of the test
+						}
+					} else {
+						// Peak users
+						usersForCycle = peakUsers
+						simulateVirtualUser(ctx, testPlan, responseChannel)
+					}
+
+					if id == usersForCycle-1 {
+						log.Infof("Chunk %d/%d completed", usersForCycle, totalUsers)
+						time.Sleep(cycleDuration)
+						currentCycle++
+					}
 				}
 			}
+
 		}(i)
 	}
 }
