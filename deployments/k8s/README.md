@@ -67,3 +67,13 @@ kubectl delete -f ./
 ```
 
 This will delete the Kubernetes resources created for this application.
+
+## Restart
+
+To restart the deployed resources, run:
+
+```bash
+kubectl rollout restart deployment <DEPLOYMENT_NAME>
+```
+
+Replace `<DEPLOYMENT_NAME>` with the name of the container, i.e. `loadtest-worker` or `loadtest-master`. Node this restart does not introduce downtime.
