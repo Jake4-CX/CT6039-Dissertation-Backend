@@ -10,8 +10,9 @@ on:
     paths-ignore:
       - 'README.md'
       - 'LICENSE'
-      # - 'deployments/**'
-      # - '.github/**'
+      - 'deployments/**'
+      - '.github/**'
+  workflow_dispatch:
 env:
   DOCKER_USERNAME: jake4
 
