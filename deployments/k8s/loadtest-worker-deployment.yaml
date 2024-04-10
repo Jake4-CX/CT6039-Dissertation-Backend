@@ -3,7 +3,7 @@ kind: Deployment
 metadata:
   name: loadtest-worker
 spec:
-  replicas: 2
+  replicas: 3
   selector:
     matchLabels:
       app: loadtest-worker
@@ -25,11 +25,11 @@ spec:
               subPath: .env
           resources:
             requests:
-              memory: "128Mi"
-              cpu: "100m"
-            limits:
-              memory: "384Mi"
+              memory: "512Mi"
               cpu: "200m"
+            limits:
+              memory: "768Mi"
+              cpu: "400m"
       volumes:
         - name: env-file
           configMap:

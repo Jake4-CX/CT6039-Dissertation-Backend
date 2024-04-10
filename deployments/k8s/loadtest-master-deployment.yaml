@@ -33,10 +33,10 @@ spec:
           resources:
             requests:
               memory: "256Mi"
-              cpu: "100m"
+              cpu: "200m"
             limits:
               memory: "1Gi"
-              cpu: "300m"
+              cpu: "400m"
       volumes:
         - name: loadtest-db
           persistentVolumeClaim:

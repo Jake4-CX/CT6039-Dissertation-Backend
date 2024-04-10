@@ -7,6 +7,7 @@ on:
       - completed
     branches:
       - master
+  workflow_dispatch:
 env:
   DO_K8S_CLUSTER_NAME: "loadtesting-lon-01"
 
@@ -24,6 +25,9 @@ jobs:
       
       - name: Save digitalocean kubeconfig
         run: doctl kubernetes cluster kubeconfig save --expiry-seconds 600 ${{ env.DO_K8S_CLUSTER_NAME }}
+
+      - name: Stop previous deployments
+        run: kubectl delete -f ./deployments/k8s || true
 
       - name: Deploy to Digital Ocean Kubernetes
         run: kubectl apply -f ./deployments/k8s
