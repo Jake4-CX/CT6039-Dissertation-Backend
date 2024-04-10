@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	log "github.com/sirupsen/logrus"
 	"github.com/zishang520/socket.io/v2/socket"
+	"gorm.io/gorm"
 )
 
 type LoadTestMetricsManager struct {
@@ -29,10 +30,13 @@ func init() {
 
 func GetLoadTest(id uuid.UUID) (structs.LoadTestModel, error) {
 	var loadTest structs.LoadTestModel
-	result := initializers.DB.Preload("TestPlan").Preload("LoadTests").Preload("LoadTests.TestMetrics").Find(&loadTest, "UUID = ?", id)
+	result := initializers.DB.Preload("TestPlan").Preload("LoadTests").Preload("LoadTests.TestMetrics").First(&loadTest, "UUID = ?", id)
 
 	if result.Error != nil {
-		return structs.LoadTestModel{}, errors.New("load test with id not found")
+		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
+			return structs.LoadTestModel{}, errors.New("load test with id not found")
+		}
+		return structs.LoadTestModel{}, result.Error
 	}
 
 	return loadTest, nil
@@ -86,7 +90,7 @@ func GetRunningLoadTestsByLoadTest(loadTest structs.LoadTestModel) []structs.Loa
 func StartLoadTest(loadTest structs.LoadTestModel, duration int, virtualUsers int, loadTestType structs.LoadTestType) (structs.LoadTestTestsModel, error) {
 	log.Infof("Starting load test with ID %s", loadTest.UUID)
 
-	if (len(GetAvailableWorkers()) == 0) {
+	if len(GetAvailableWorkers()) == 0 {
 		log.Errorf("No workers available to start load test")
 		return structs.LoadTestTestsModel{}, errors.New("no workers available")
 	}
@@ -172,7 +176,7 @@ func CompleteLoadTestByTestModel(loadTestsTest structs.LoadTestTestsModel) (stru
 		return structs.LoadTestTestsModel{}, updateResult.Error
 	}
 
-	go func () {
+	go func() {
 		testId := loadTestsTest.ID
 		if _, exists := MetricsManager.Metrics[testId]; !exists {
 			log.Errorf("Load test with ID %d not found in metrics ", testId)
