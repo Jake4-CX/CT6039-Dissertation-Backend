@@ -1,0 +1,55 @@
+{
+  "edges": [
+    {
+      "id": "reactflow__edge-458fe167-1d24-44c8-85f6-1ccccfcbca9foutput-ae567ce9-9a76-4b28-b79d-e1f1972b5b02input",
+      "source": "458fe167-1d24-44c8-85f6-1ccccfcbca9f",
+      "sourceHandle": "output",
+      "target": "ae567ce9-9a76-4b28-b79d-e1f1972b5b02",
+      "targetHandle": "input"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "458fe167-1d24-44c8-85f6-1ccccfcbca9f",
+      "type": "startNode",
+      "data": {
+        "label": "Start Node"
+      },
+      "position": {
+        "x": 0,
+        "y": 0
+      },
+      "PositionAbsolute": {
+        "x": 0,
+        "y": 0
+      },
+      "width": 68,
+      "height": 42,
+      "connectable": true
+    },
+    {
+      "id": "ae567ce9-9a76-4b28-b79d-e1f1972b5b02",
+      "type": "getRequest",
+      "data": {
+        "label": "Get Request",
+        "url": "https://example.com/get/changed"
+      },
+      "position": {
+        "x": -24.5,
+        "y": 69.25
+      },
+      "PositionAbsolute": {
+        "x": -24.5,
+        "y": 69.25
+      },
+      "width": 118,
+      "height": 85,
+      "connectable": true
+    }
+  ],
+  "viewport": {
+    "x": 318,
+    "y": 74.75,
+    "zoom": 2
+  }
+}

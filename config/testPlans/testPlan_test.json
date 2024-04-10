@@ -1,0 +1,22 @@
+[
+  {
+    "name": "Start Node",
+    "type": "startNode",
+    "data": {
+      "label": "Start Node"
+    },
+    "children": [
+      {
+        "name": "Get Request",
+        "type": "getRequest",
+        "data": {
+          "label": "Get Request",
+          "url": "https://example.com/get/changed"
+        },
+        "children": [],
+        "conditions": null
+      }
+    ],
+    "conditions": null
+  }
+]
