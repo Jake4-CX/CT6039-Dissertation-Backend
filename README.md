@@ -28,7 +28,7 @@ To set up the backend using Docker:
 2. Clone the repository:
 
 ```bash
-git clone https://github.com/yourusername/CT6039-Dissertation-Backend.git
+git clone https://github.com/Jake4-CX/CT6039-Dissertation-Backend.git
 ```
 
 3. Navigate to the project directory:
