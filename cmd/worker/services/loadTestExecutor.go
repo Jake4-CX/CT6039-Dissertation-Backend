@@ -8,12 +8,16 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/cmd/worker/state"
 	"github.com/Jake4-CX/CT6039-Dissertation-Backend-Test-2/pkg/structs"
 	log "github.com/sirupsen/logrus"
 )
+
+var activeGoroutines int64
+var activeGoroutineIDs []int
 
 func ExecuteLoadTest(assignment structs.TaskAssignment) {
 	log.Infof("Executing load test with config: %+v", assignment)
@@ -63,8 +67,25 @@ func ExecuteLoadTest(assignment structs.TaskAssignment) {
 		log.Errorf("Unknown load test type: %s", assignment.LoadTestTestsModel.LoadTestType)
 	}
 
+	// go func() {
+	// 	// loop until the context is done
+	// 	for {
+	// 		if atomic.LoadInt64(&activeGoroutines) == 0 {
+	// 			break
+	// 		}
+	// 		log.Infof("Active goroutines: %d", atomic.LoadInt64(&activeGoroutines))
+	// 		log.Infof("Active goroutine IDs: %v", activeGoroutineIDs)
+	// 		time.Sleep(1 * time.Second)
+	// 	}
+	// }()
+
 	wg.Wait()
+
+	log.Infof("All goroutines finished. Active goroutines: %d", atomic.LoadInt64(&activeGoroutines))
+
 	close(responseChannel)
+
+	log.Info("Waiting for metrics to be reported")
 
 	testDuration := time.Since(testStartTime)
 
@@ -73,18 +94,34 @@ func ExecuteLoadTest(assignment structs.TaskAssignment) {
 
 // Put Load Test Type Executor functions here
 func executeConstantLoad(ctx context.Context, assignment structs.TaskAssignment, testPlan []structs.TreeNode, wg *sync.WaitGroup, responseChannel chan<- structs.ResponseItem) {
+
+	// make an array of goroutines Ids
+
 	for i := 0; i < assignment.LoadTestTestsModel.VirtualUsers; i++ {
 		wg.Add(1)
+		atomic.AddInt64(&activeGoroutines, 1)
+		activeGoroutineIDs = append(activeGoroutineIDs, i)
 		go func(id int) {
 			defer wg.Done()
+			defer atomic.AddInt64(&activeGoroutines, -1)
+			defer func() {
+				// Remove the goroutine ID from the active goroutine IDs slice
+				for i, v := range activeGoroutineIDs {
+					if v == id {
+						activeGoroutineIDs = append(activeGoroutineIDs[:i], activeGoroutineIDs[i+1:]...)
+						break
+					}
+				}
+			}()
 			for {
 				select {
 				case <-ctx.Done():
+					log.Infof("(Virtual User: %d) Test duration is over", id)
 					// Test duration is over.
 					return
 				default:
 					// Make request
-					simulateVirtualUser(ctx, testPlan, responseChannel)
+					simulateVirtualUser(ctx, testPlan, id, responseChannel)
 				}
 			}
 		}(i)
@@ -114,7 +151,7 @@ func executeGradualIncreaseLoad(ctx context.Context, assignment structs.TaskAssi
 					// Determine if user is in the allowed chunk
 					if id < (currentChunk+1)*chunkSize {
 						// Simulate the virtual user
-						simulateVirtualUser(ctx, testPlan, responseChannel)
+						simulateVirtualUser(ctx, testPlan, id, responseChannel)
 					} else {
 						// log.Info("User not allowed to make request in this chunk - ", id)
 						time.Sleep(500 * time.Millisecond) // If this is removed, the CPU usage will be very high. This could also wait for longer, but it may reduce the accuracy of the test
@@ -162,14 +199,14 @@ func executeSpikeLoad(ctx context.Context, assignment structs.TaskAssignment, te
 						usersForCycle = lowUsers
 						if id < lowUsers {
 							// Simulate the virtual user
-							simulateVirtualUser(ctx, testPlan, responseChannel)
+							simulateVirtualUser(ctx, testPlan, id, responseChannel)
 						} else {
 							time.Sleep(500 * time.Millisecond) // If this is removed, the CPU usage will be very high. This could also wait for longer, but it may reduce the accuracy of the test
 						}
 					} else {
 						// Peak users
 						usersForCycle = peakUsers
-						simulateVirtualUser(ctx, testPlan, responseChannel)
+						simulateVirtualUser(ctx, testPlan, id, responseChannel)
 					}
 
 					if id == usersForCycle-1 {
@@ -184,10 +221,10 @@ func executeSpikeLoad(ctx context.Context, assignment structs.TaskAssignment, te
 	}
 }
 
-func simulateVirtualUser(ctx context.Context, testPlan []structs.TreeNode, responseChannel chan<- structs.ResponseItem) {
+func simulateVirtualUser(ctx context.Context, testPlan []structs.TreeNode, id int, responseChannel chan<- structs.ResponseItem) {
 
 	client := &http.Client{
-		Timeout: 3 * time.Second,
+		Timeout: 3000 * time.Millisecond,
 	}
 	// Execute the test plan nodes
 	for _, node := range testPlan {
@@ -196,19 +233,24 @@ func simulateVirtualUser(ctx context.Context, testPlan []structs.TreeNode, respo
 			// Test duration is over.
 			return
 		default:
-			executeTreeNode(ctx, node, client, &LastRequestInfo{}, responseChannel)
+			executeTreeNode(ctx, node, client, &LastRequestInfo{}, responseChannel, id)
+			log.Debugf("Finished executing test plan node (VirtualUser ID: %d)", id)
 		}
 	}
 }
 
-func makeRequest(ctx context.Context, client *http.Client, url string, method string, requestBody []byte, responseChannel chan<- structs.ResponseItem) (lastRequestInfo LastRequestInfo) {
+func makeRequest(ctx context.Context, client *http.Client, url string, method string, requestBody []byte, responseChannel chan<- structs.ResponseItem, id int) (lastRequestInfo LastRequestInfo) {
 	var req *http.Request
 	var err error
 
 	if len(requestBody) > 0 {
+		// log.Infof("VIRTUALUSER: %d REQUEST:A-POST/PUT", id)
 		req, err = http.NewRequestWithContext(ctx, method, url, bytes.NewBuffer(requestBody))
+		// log.Infof("VIRTUALUSER: %d REQUEST:B-POST/PUT", id)
 	} else {
+		// log.Infof("VIRTUALUSER: %d REQUEST:A-REGULAR", id)
 		req, err = http.NewRequestWithContext(ctx, method, url, nil)
+		// log.Infof("VIRTUALUSER: %d REQUEST:B-REGULAR", id)
 	}
 
 	if err != nil {
@@ -221,13 +263,17 @@ func makeRequest(ctx context.Context, client *http.Client, url string, method st
 		}
 	}
 
+	// log.Infof("VIRTUALUSER: %d REQUEST:C", id)
 	start := time.Now()
 	resp, err := client.Do(req)
 	elapsed := time.Since(start).Milliseconds()
+	// log.Infof("VIRTUALUSER: %d REQUEST:D", id)
 
 	if err != nil {
-		// log.Infof("(Virtual User: %d) Failed to execute request: %s", id, err)
+		log.Infof("(Virtual User: %d) Failed to execute request: %s", id, err)
+		// log.Infof("VIRTUALUSER: %d REQUEST:E1", id)
 		responseChannel <- structs.ResponseItem{StatusCode: 0, ResponseTime: elapsed}
+		// log.Infof("VIRTUALUSER: %d REQUEST:E2", id)
 		return LastRequestInfo{
 			ResponseCode: 0,
 			ResponseTime: elapsed,
@@ -235,6 +281,8 @@ func makeRequest(ctx context.Context, client *http.Client, url string, method st
 		}
 	}
 	defer resp.Body.Close()
+
+	// log.Infof("VIRTUALUSER: %d REQUEST:F", id)
 
 	responseSize := resp.ContentLength
 	responseChannel <- structs.ResponseItem{StatusCode: resp.StatusCode, ResponseTime: elapsed}
@@ -252,7 +300,9 @@ type LastRequestInfo struct {
 	ResponseSize int64
 }
 
-func executeTreeNode(ctx context.Context, node structs.TreeNode, client *http.Client, lastRequestInfo *LastRequestInfo, responseChannel chan<- structs.ResponseItem) {
+func executeTreeNode(ctx context.Context, node structs.TreeNode, client *http.Client, lastRequestInfo *LastRequestInfo, responseChannel chan<- structs.ResponseItem, id int) {
+	// log.Infof("VIRTUALUSER: %d EXECUTING NODE: %s", id, node.Type)
+
 	switch node.Type {
 	case structs.GetRequest:
 		getRequestNode, ok := node.Data.(*structs.GetRequestNodeData)
@@ -262,7 +312,7 @@ func executeTreeNode(ctx context.Context, node structs.TreeNode, client *http.Cl
 		}
 		log.Debugf("Making GET request to %s", getRequestNode.URL)
 
-		*lastRequestInfo = makeRequest(ctx, client, getRequestNode.URL, "GET", nil, responseChannel)
+		*lastRequestInfo = makeRequest(ctx, client, getRequestNode.URL, "GET", nil, responseChannel, id)
 
 	case structs.PostRequest:
 		postRequestNode, ok := node.Data.(*structs.PostRequestNodeData)
@@ -272,7 +322,7 @@ func executeTreeNode(ctx context.Context, node structs.TreeNode, client *http.Cl
 		}
 		log.Debugf("Making POST request to %s with body: %s", postRequestNode.URL, postRequestNode.Body)
 
-		*lastRequestInfo = makeRequest(ctx, client, postRequestNode.URL, "POST", []byte(postRequestNode.Body), responseChannel)
+		*lastRequestInfo = makeRequest(ctx, client, postRequestNode.URL, "POST", []byte(postRequestNode.Body), responseChannel, id)
 
 	case structs.PutRequest:
 		putRequestNode, ok := node.Data.(*structs.PutRequestNodeData)
@@ -283,7 +333,7 @@ func executeTreeNode(ctx context.Context, node structs.TreeNode, client *http.Cl
 
 		log.Debugf("Making PUT request to %s with body: %s", putRequestNode.URL, putRequestNode.Body)
 
-		*lastRequestInfo = makeRequest(ctx, client, putRequestNode.URL, "PUT", []byte(putRequestNode.Body), responseChannel)
+		*lastRequestInfo = makeRequest(ctx, client, putRequestNode.URL, "PUT", []byte(putRequestNode.Body), responseChannel, id)
 
 	case structs.DeleteRequest:
 		deleteRequestNode, ok := node.Data.(*structs.DeleteRequestNodeData)
@@ -294,7 +344,7 @@ func executeTreeNode(ctx context.Context, node structs.TreeNode, client *http.Cl
 
 		log.Debugf("Making DELETE request to %s", deleteRequestNode.URL)
 
-		*lastRequestInfo = makeRequest(ctx, client, deleteRequestNode.URL, "DELETE", nil, responseChannel)
+		*lastRequestInfo = makeRequest(ctx, client, deleteRequestNode.URL, "DELETE", nil, responseChannel, id)
 
 	case structs.IfCondition:
 		ifConditionNode, ok := node.Data.(*structs.IfConditionNodeData)
@@ -307,11 +357,19 @@ func executeTreeNode(ctx context.Context, node structs.TreeNode, client *http.Cl
 
 		if evaluateField(ifConditionNode, lastRequestInfo) {
 			for _, children := range node.Conditions.TrueChildren {
-				executeTreeNode(ctx, children, client, lastRequestInfo, responseChannel)
+				executeTreeNode(ctx, children, client, lastRequestInfo, responseChannel, id)
+
+				if ctx.Err() != nil {
+					return
+				}
 			}
 		} else {
 			for _, children := range node.Conditions.FalseChildren {
-				executeTreeNode(ctx, children, client, lastRequestInfo, responseChannel)
+				executeTreeNode(ctx, children, client, lastRequestInfo, responseChannel, id)
+
+				if ctx.Err() != nil {
+					return
+				}
 			}
 		}
 	case structs.DelayNode:
@@ -352,9 +410,13 @@ func executeTreeNode(ctx context.Context, node structs.TreeNode, client *http.Cl
 		return
 	}
 
-	if node.Type != "ifCondition" {
+	if node.Type != "ifCondition" && ctx.Err() == nil {
 		for _, children := range node.Children {
-			executeTreeNode(ctx, children, client, lastRequestInfo, responseChannel)
+			executeTreeNode(ctx, children, client, lastRequestInfo, responseChannel, id)
+
+			if ctx.Err() != nil {
+				return
+			}
 		}
 	}
 }
