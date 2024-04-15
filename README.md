@@ -56,6 +56,10 @@ For deploying the backend to a production environment:
 - Configure the Kubernetes files under `/deployments/k8s` to suit your deployment needs.
 - Use the provided manifests to deploy the backend services on a Kubernetes cluster, such as Digital Ocean's Kubernetes service.
 
+## Backend Repository
+
+For the backend source code and setup instructions, please visit the [frontend repository](https://github.com/Jake4-CX/CT6039-Dissertation-Front-End/).
+
 ## Contributing
 
 Contributions are highly welcome. Please fork the repository and submit pull requests for any features or bug fixes.
