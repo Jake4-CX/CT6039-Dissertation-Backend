@@ -1,6 +1,7 @@
 package managers
 
 import (
+	"encoding/json"
 	"errors"
 	"strconv"
 	"sync"
@@ -30,7 +31,7 @@ func init() {
 
 func GetLoadTest(id uuid.UUID) (structs.LoadTestModel, error) {
 	var loadTest structs.LoadTestModel
-	result := initializers.DB.Preload("TestPlan").Preload("LoadTests").Preload("LoadTests.TestMetrics").First(&loadTest, "UUID = ?", id)
+	result := initializers.DB.Preload("TestPlan").Preload("LoadTests").Preload("LoadTests.TestMetrics").Preload("LoadTests.TestMetrics.LoadTestHistory").First(&loadTest, "UUID = ?", id)
 
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
@@ -185,6 +186,51 @@ func CompleteLoadTestByTestModel(loadTestsTest structs.LoadTestTestsModel) (stru
 		metricsMap := *MetricsManager.Metrics[testId]
 
 		reportToSockets(loadTestsTest, metricsMap, -1)
+
+		go func() {
+			time.Sleep(3 * time.Second)
+
+			testHistoryMap := make(map[int64]structs.TestHistoryFragment)
+			for second, fragments := range metricsMap {
+				var totalResponseTime int64
+				var averageResponseTime int64
+				numFragments := len(fragments)
+
+				if numFragments > 0 { // Check to ensure it's not dividing by zero
+					for _, fragment := range fragments {
+						totalResponseTime += fragment.ResponseTime
+					}
+					averageResponseTime = totalResponseTime / int64(numFragments)
+				} else {
+					log.Warnf("No fragments found for second %d, cannot calculate average response time.", second)
+					averageResponseTime = 0
+				}
+
+				testHistoryMap[second] = structs.TestHistoryFragment{
+					Requests:            int64(numFragments),
+					AverageResponseTime: averageResponseTime,
+				}
+			}
+
+			testHistoryJSON, err := json.Marshal(testHistoryMap)
+			if err != nil {
+				log.Errorf("Error marshaling test history: %s", err)
+				return
+			}
+
+			testHistory := structs.LoadTestHistoryModel{
+				LoadTestMetricModelId: loadTestsTest.TestMetrics.ID,
+				TestHistory:           string(testHistoryJSON),
+			}
+
+			if err := initializers.DB.Save(&testHistory).Error; err != nil {
+				log.Errorf("Failed to save test history: %s", err)
+			} else {
+				log.Info("Test history saved successfully")
+			}
+
+		}()
+
 	}()
 
 	return loadTestsTest, nil

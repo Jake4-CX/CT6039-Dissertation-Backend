@@ -17,3 +17,8 @@ type ResponseFragment struct {
 	StatusCode   int   `json:"statusCode"`
 	ResponseTime int64 `json:"responseTime"`
 }
+
+type TestHistoryFragment struct {
+	Requests            int64 `json:"requests"`
+	AverageResponseTime int64 `json:"averageResponseTime"`
+}

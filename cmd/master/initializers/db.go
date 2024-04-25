@@ -22,6 +22,7 @@ func InitializeDB() {
 		&structs.LoadTestPlanModel{},
 		&structs.LoadTestTestsModel{},
 		&structs.LoadTestMetricsModel{},
+		&structs.LoadTestHistoryModel{},
 	)
 	if err != nil {
 		log.Fatalf("Failed to auto-migrate database: %v", err)

@@ -57,12 +57,19 @@ type LoadTestTestsModel struct {
 
 type LoadTestMetricsModel struct {
 	GormModel
-	LoadTestTestsModelID uint  `json:"loadTestTestsModelId"` // Foreign key
-	TotalRequests        int   `json:"totalRequests"`
-	SuccessfulRequests   int   `json:"successfulRequests"`
-	FailedRequests       int   `json:"failedRequests"`
-	TotalResponseTime    int64 `json:"totalResponseTime"`
-	AverageResponseTime  int64 `json:"averageResponseTime"`
+	LoadTestTestsModelID uint                  `json:"loadTestTestsModelId"` // Foreign key
+	TotalRequests        int                   `json:"totalRequests"`
+	SuccessfulRequests   int                   `json:"successfulRequests"`
+	FailedRequests       int                   `json:"failedRequests"`
+	TotalResponseTime    int64                 `json:"totalResponseTime"`
+	AverageResponseTime  int64                 `json:"averageResponseTime"`
+	LoadTestHistory      *LoadTestHistoryModel `json:"loadTestHistory" gorm:"foreignKey:LoadTestMetricModelId;constraint:OnUpdate:CASCADE,OnDelete:SET NULL;"` // Optional relation
+}
+
+type LoadTestHistoryModel struct {
+	GormModel
+	LoadTestMetricModelId uint   `json:"loadTestMetricModelId"` // Foreign key
+	TestHistory           string `gorm:"type:text" json:"testHistory"`
 }
 
 func (loadTestModel *LoadTestModel) BeforeCreate(tx *gorm.DB) (err error) {
